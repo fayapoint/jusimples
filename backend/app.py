@@ -26,8 +26,16 @@ allowed_origins = os.getenv('CORS_ORIGINS', 'http://localhost:3000,https://jusim
 CORS(app, origins=allowed_origins)
 
 # OpenAI configuration
+openai_api_key = os.getenv('OPENAI_API_KEY')
+logger.info(f"OpenAI API Key status: {'SET' if openai_api_key and openai_api_key != 'your_openai_api_key_here' else 'NOT SET'}")
+
 try:
-    client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+    if openai_api_key and openai_api_key != 'your_openai_api_key_here':
+        client = OpenAI(api_key=openai_api_key)
+        logger.info("OpenAI client initialized successfully")
+    else:
+        client = None
+        logger.warning("OpenAI API key not configured properly")
 except Exception as e:
     logger.error(f"Failed to initialize OpenAI client: {e}")
     client = None
@@ -163,19 +171,26 @@ def ask_question():
         data = request.get_json()
         question = data.get('question', '').strip()
         
+        logger.info(f"Received question request: {question[:100] if question else 'No question provided'}")
+        logger.info(f"OpenAI client status: {'Available' if client else 'Not available'}")
+        
         if not question:
+            logger.warning("No question provided in request")
             return jsonify({"error": "Pergunta não fornecida"}), 400
         
         if len(question) < 10:
+            logger.warning(f"Question too short: {len(question)} characters")
             return jsonify({"error": "Pergunta muito curta. Forneça mais detalhes."}), 400
         
         logger.info(f"Processing question: {question[:100]}...")
         
         # Search relevant legal knowledge
         relevant_context = search_legal_knowledge(question)
+        logger.info(f"Found {len(relevant_context)} relevant documents")
         
         # Generate AI response
         ai_answer = generate_ai_response(question, relevant_context)
+        logger.info(f"Generated AI response: {ai_answer[:100]}...")
         
         response = {
             "question": question,
@@ -191,16 +206,26 @@ def ask_question():
             ],
             "confidence": 0.85,
             "timestamp": datetime.utcnow().isoformat(),
-            "disclaimer": "Esta resposta é baseada em IA e tem caráter informativo. Para casos complexos, consulte um advogado especializado."
+            "disclaimer": "Esta resposta é baseada em IA e tem caráter informativo. Para casos complexos, consulte um advogado especializado.",
+            "debug_info": {
+                "openai_available": client is not None,
+                "context_found": len(relevant_context),
+                "api_key_configured": openai_api_key is not None and openai_api_key != 'your_openai_api_key_here'
+            }
         }
         
+        logger.info("Successfully processed question and returning response")
         return jsonify(response)
         
     except Exception as e:
-        logger.error(f"Error in ask_question: {str(e)}")
+        logger.error(f"Error in ask_question: {str(e)}", exc_info=True)
         return jsonify({
             "error": "Erro interno do servidor",
-            "message": "Não foi possível processar sua pergunta no momento."
+            "message": "Não foi possível processar sua pergunta no momento.",
+            "debug_info": {
+                "error_type": type(e).__name__,
+                "error_message": str(e)
+            }
         }), 500
 
 @app.route('/api/search', methods=['POST'])
@@ -233,6 +258,18 @@ def search_legal():
     except Exception as e:
         logger.error(f"Error in search_legal: {str(e)}")
         return jsonify({"error": "Erro na busca"}), 500
+
+@app.route('/api/debug')
+def debug_system():
+    """Debug endpoint to check system status"""
+    return jsonify({
+        "openai_api_key_set": openai_api_key is not None and openai_api_key != 'your_openai_api_key_here',
+        "openai_client_available": client is not None,
+        "cors_origins": os.getenv('CORS_ORIGINS', 'not_set'),
+        "flask_env": os.getenv('FLASK_ENV', 'not_set'),
+        "knowledge_base_size": len(LEGAL_KNOWLEDGE),
+        "timestamp": datetime.utcnow().isoformat()
+    })
 
 @app.route('/api/legal-data')
 def get_legal_data():
