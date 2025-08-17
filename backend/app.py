@@ -483,9 +483,12 @@ def internal_error(error):
 
 if __name__ == '__main__':
     try:
+        # Initialize OpenAI client on startup
+        initialize_openai_client()
+        
+        # Run Flask app
         port = int(os.getenv('PORT', 5000))
-        logger.info(f"Starting Flask app on port {port}")
-        logger.info(f"OpenAI client status: {'Available' if client else 'Not available'}")
+        logger.info(f"🚀 Starting JuSimples Flask app on port {port}")
         app.run(host='0.0.0.0', port=port, debug=False)
     except Exception as e:
         logger.error(f"Failed to start Flask app: {e}")
