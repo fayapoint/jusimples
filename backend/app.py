@@ -1,207 +1,130 @@
 import os
 import logging
-from datetime import datetime, timedelta
-from typing import List, Dict, Optional
+from datetime import datetime
+from typing import Dict, List
 
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from dotenv import load_dotenv
-import openai
-from langchain.embeddings.openai import OpenAIEmbeddings
-from langchain.vectorstores import Chroma
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.llms import OpenAI
-from langchain.chains import RetrievalQA
-from langchain.document_loaders import WebBaseLoader
-import requests
-from bs4 import BeautifulSoup
-import json
+from openai import OpenAI
 
 # Load environment variables
 load_dotenv()
 
 # Configure logging
-logging.basicConfig(level=getattr(logging, os.getenv('LOG_LEVEL', 'INFO')))
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
 # CORS configuration
-allowed_origins = os.getenv('CORS_ORIGINS', 'http://localhost:3000').split(',')
+allowed_origins = os.getenv('CORS_ORIGINS', 'http://localhost:3000,https://jusimples.netlify.app').split(',')
 CORS(app, origins=allowed_origins)
 
 # OpenAI configuration
-openai.api_key = os.getenv('OPENAI_API_KEY')
+client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 
-class LegalRAGSystem:
-    """RAG system for legal document processing and question answering"""
-    
-    def __init__(self):
-        self.embeddings = OpenAIEmbeddings()
-        self.vectorstore = None
-        self.qa_chain = None
-        self.text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1000,
-            chunk_overlap=200,
-            length_function=len,
-        )
-        self.initialize_vectorstore()
-    
-    def initialize_vectorstore(self):
-        """Initialize the vector database with legal documents"""
-        try:
-            # Initialize ChromaDB for local development
-            persist_directory = os.path.join(os.path.dirname(__file__), 'chroma_db')
-            self.vectorstore = Chroma(
-                persist_directory=persist_directory,
-                embedding_function=self.embeddings
-            )
-            
-            # Initialize QA chain
-            llm = OpenAI(temperature=0.2, max_tokens=1000)
-            self.qa_chain = RetrievalQA.from_chain_type(
-                llm=llm,
-                chain_type="stuff",
-                retriever=self.vectorstore.as_retriever(search_kwargs={"k": 3}),
-                return_source_documents=True
-            )
-            
-            logger.info("RAG system initialized successfully")
-        except Exception as e:
-            logger.error(f"Error initializing RAG system: {str(e)}")
-            self.vectorstore = None
-            self.qa_chain = None
-    
-    def add_legal_documents(self, documents: List[Dict]):
-        """Add legal documents to the vector database"""
-        if not self.vectorstore:
-            logger.error("Vector store not initialized")
-            return False
-        
-        try:
-            texts = []
-            metadatas = []
-            
-            for doc in documents:
-                # Split document into chunks
-                chunks = self.text_splitter.split_text(doc['content'])
-                
-                for chunk in chunks:
-                    texts.append(chunk)
-                    metadatas.append({
-                        'title': doc['title'],
-                        'category': doc.get('category', 'unknown'),
-                        'source': doc.get('source', 'unknown'),
-                        'article': doc.get('article', ''),
-                        'law_number': doc.get('law_number', ''),
-                        'date': doc.get('date', '')
-                    })
-            
-            # Add to vector store
-            self.vectorstore.add_texts(texts=texts, metadatas=metadatas)
-            self.vectorstore.persist()
-            
-            logger.info(f"Added {len(texts)} document chunks to vector store")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Error adding documents to vector store: {str(e)}")
-            return False
-    
-    def query_legal_documents(self, question: str) -> Dict:
-        """Query the RAG system with a legal question"""
-        if not self.qa_chain:
-            return {
-                "answer": "Sistema de IA não disponível no momento. Tente novamente mais tarde.",
-                "sources": [],
-                "confidence": 0.0
-            }
-        
-        try:
-            # Enhanced prompt for Brazilian legal context
-            enhanced_question = f"""
-            Baseado na legislação brasileira, responda a seguinte pergunta de forma clara e precisa:
-            
-            {question}
-            
-            Forneça uma resposta estruturada que inclua:
-            1. Resposta direta à pergunta
-            2. Base legal aplicável
-            3. Orientações práticas quando relevante
-            
-            Pergunta: {question}
-            """
-            
-            result = self.qa_chain({"query": enhanced_question})
-            
-            # Process sources
-            sources = []
-            if result.get('source_documents'):
-                for doc in result['source_documents']:
-                    sources.append({
-                        'title': doc.metadata.get('title', 'Documento Legal'),
-                        'category': doc.metadata.get('category', 'unknown'),
-                        'article': doc.metadata.get('article', ''),
-                        'content_preview': doc.page_content[:200] + "..." if len(doc.page_content) > 200 else doc.page_content,
-                        'relevance': 0.8  # Placeholder - could implement actual relevance scoring
-                    })
-            
-            return {
-                "answer": result['result'],
-                "sources": sources,
-                "confidence": 0.85  # Placeholder - could implement confidence scoring
-            }
-            
-        except Exception as e:
-            logger.error(f"Error querying RAG system: {str(e)}")
-            return {
-                "answer": "Erro ao processar sua pergunta. Tente reformular ou entre em contato com o suporte.",
-                "sources": [],
-                "confidence": 0.0
-            }
-
-# Initialize RAG system
-rag_system = LegalRAGSystem()
-
-# Sample legal data for initial testing
-initial_legal_data = [
+# Legal knowledge base (simplified approach)
+LEGAL_KNOWLEDGE = [
     {
         "title": "Constituição Federal - Art. 5º",
-        "content": "Todos são iguais perante a lei, sem distinção de qualquer natureza, garantindo-se aos brasileiros e aos estrangeiros residentes no País a inviolabilidade do direito à vida, à liberdade, à igualdade, à segurança e à propriedade, nos termos seguintes: I - homens e mulheres são iguais em direitos e obrigações, nos termos desta Constituição; II - ninguém será obrigado a fazer ou deixar de fazer alguma coisa senão em virtude de lei;",
+        "content": "Todos são iguais perante a lei, sem distinção de qualquer natureza, garantindo-se aos brasileiros e aos estrangeiros residentes no País a inviolabilidade do direito à vida, à liberdade, à igualdade, à segurança e à propriedade.",
         "category": "direitos_fundamentais",
-        "source": "Constituição Federal",
-        "article": "Art. 5º",
-        "law_number": "CF/1988"
+        "keywords": ["direitos fundamentais", "igualdade", "liberdade", "vida", "segurança", "propriedade"]
     },
     {
-        "title": "Código Civil - Art. 1º",
+        "title": "Código Civil - Personalidade Civil",
         "content": "Toda pessoa é capaz de direitos e deveres na ordem civil. A personalidade civil da pessoa começa do nascimento com vida; mas a lei põe a salvo, desde a concepção, os direitos do nascituro.",
         "category": "direito_civil",
-        "source": "Código Civil",
-        "article": "Art. 1º",
-        "law_number": "Lei 10.406/2002"
+        "keywords": ["personalidade civil", "capacidade", "nascimento", "nascituro", "direitos civis"]
     },
     {
-        "title": "CLT - Art. 7º",
-        "content": "São direitos dos trabalhadores urbanos e rurais, além de outros que visem à melhoria de sua condição social: I - relação de emprego protegida contra despedida arbitrária ou sem justa causa, nos termos de lei complementar, que preverá indenização compensatória, dentre outros direitos; II - seguro-desemprego, em caso de desemprego involuntário;",
+        "title": "CLT - Direitos Trabalhistas",
+        "content": "São direitos dos trabalhadores urbanos e rurais: relação de emprego protegida contra despedida arbitrária, seguro-desemprego, salário mínimo, irredutibilidade salarial, décimo terceiro salário, repouso semanal remunerado, férias anuais remuneradas.",
         "category": "direito_trabalhista",
-        "source": "CLT",
-        "article": "Art. 7º",
-        "law_number": "Decreto-Lei 5.452/1943"
+        "keywords": ["trabalho", "emprego", "salário", "férias", "demissão", "CLT", "trabalhador"]
+    },
+    {
+        "title": "Código de Defesa do Consumidor",
+        "content": "O consumidor tem direito à proteção contra publicidade enganosa, produtos defeituosos, práticas abusivas, direito de arrependimento em compras online (7 dias), garantia legal e contratual.",
+        "category": "direito_consumidor",
+        "keywords": ["consumidor", "compra", "produto defeituoso", "garantia", "arrependimento", "CDC"]
+    },
+    {
+        "title": "Direito de Família - Pensão Alimentícia",
+        "content": "A pensão alimentícia é devida entre parentes, cônjuges ou companheiros. O valor deve considerar as necessidades do alimentando e as possibilidades do alimentante, podendo ser revista a qualquer tempo.",
+        "category": "direito_familia",
+        "keywords": ["pensão alimentícia", "família", "filhos", "divórcio", "alimentante", "necessidades"]
     }
 ]
 
-# Add initial data to RAG system
-if rag_system.vectorstore:
-    rag_system.add_legal_documents(initial_legal_data)
+def search_legal_knowledge(query: str) -> List[Dict]:
+    """Simple keyword-based search in legal knowledge"""
+    query_lower = query.lower()
+    results = []
+    
+    for item in LEGAL_KNOWLEDGE:
+        # Check if query matches keywords or content
+        match_score = 0
+        for keyword in item["keywords"]:
+            if keyword.lower() in query_lower:
+                match_score += 1
+        
+        if match_score > 0 or query_lower in item["content"].lower():
+            results.append({
+                **item,
+                "relevance": match_score
+            })
+    
+    # Sort by relevance
+    results.sort(key=lambda x: x["relevance"], reverse=True)
+    return results[:3]  # Return top 3 results
+
+def generate_ai_response(question: str, context: List[Dict]) -> str:
+    """Generate AI response using OpenAI with legal context"""
+    try:
+        # Build context from legal knowledge
+        context_text = ""
+        if context:
+            context_text = "Contexto legal relevante:\n"
+            for item in context:
+                context_text += f"- {item['title']}: {item['content']}\n"
+        
+        prompt = f"""Você é um assistente jurídico especializado em direito brasileiro. 
+        Responda a pergunta de forma clara, precisa e acessível para pessoas sem conhecimento jurídico avançado.
+
+        {context_text}
+
+        Pergunta: {question}
+
+        Forneça uma resposta estruturada que inclua:
+        1. Resposta direta e clara
+        2. Base legal quando aplicável
+        3. Orientações práticas
+        4. Recomendação de consultar um advogado para casos complexos
+
+        Mantenha a resposta concisa mas completa."""
+
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=500,
+            temperature=0.3
+        )
+        
+        return response.choices[0].message.content
+        
+    except Exception as e:
+        logger.error(f"Error generating AI response: {str(e)}")
+        return "Não foi possível gerar uma resposta no momento. Tente novamente ou consulte um advogado."
 
 @app.route('/')
 def home():
     return jsonify({
         "message": "JuSimples Legal AI API",
-        "version": "2.0.0",
+        "version": "2.1.0",
         "status": "running",
-        "rag_system": "initialized" if rag_system.qa_chain else "error"
+        "mode": "simplified"
     })
 
 @app.route('/api/health')
@@ -209,8 +132,8 @@ def health_check():
     return jsonify({
         "status": "healthy",
         "timestamp": datetime.utcnow().isoformat(),
-        "rag_system": "operational" if rag_system.qa_chain else "unavailable",
-        "vector_store": "connected" if rag_system.vectorstore else "disconnected"
+        "ai_system": "operational",
+        "knowledge_base": f"{len(LEGAL_KNOWLEDGE)} documents"
     })
 
 @app.route('/api/ask', methods=['POST'])
@@ -227,14 +150,25 @@ def ask_question():
         
         logger.info(f"Processing question: {question[:100]}...")
         
-        # Query RAG system
-        result = rag_system.query_legal_documents(question)
+        # Search relevant legal knowledge
+        relevant_context = search_legal_knowledge(question)
+        
+        # Generate AI response
+        ai_answer = generate_ai_response(question, relevant_context)
         
         response = {
             "question": question,
-            "answer": result["answer"],
-            "sources": result["sources"],
-            "confidence": result["confidence"],
+            "answer": ai_answer,
+            "sources": [
+                {
+                    "title": item["title"],
+                    "category": item["category"],
+                    "content_preview": item["content"][:200] + "...",
+                    "relevance": item.get("relevance", 0)
+                }
+                for item in relevant_context
+            ],
+            "confidence": 0.85,
             "timestamp": datetime.utcnow().isoformat(),
             "disclaimer": "Esta resposta é baseada em IA e tem caráter informativo. Para casos complexos, consulte um advogado especializado."
         }
@@ -257,34 +191,23 @@ def search_legal():
         if not query:
             return jsonify({"error": "Query não fornecida"}), 400
         
-        # Use RAG system for semantic search
-        if rag_system.vectorstore:
-            docs = rag_system.vectorstore.similarity_search(query, k=5)
-            results = []
-            
-            for doc in docs:
-                results.append({
-                    "title": doc.metadata.get('title', 'Documento Legal'),
-                    "content": doc.page_content,
-                    "category": doc.metadata.get('category', 'unknown'),
-                    "source": doc.metadata.get('source', 'unknown'),
-                    "article": doc.metadata.get('article', ''),
-                    "relevance": 0.8  # Placeholder
-                })
-            
-            return jsonify({
-                "query": query,
-                "results": results,
-                "total": len(results),
-                "search_type": "semantic"
-            })
-        else:
-            return jsonify({
-                "query": query,
-                "results": [],
-                "total": 0,
-                "error": "Sistema de busca não disponível"
-            })
+        # Search legal knowledge
+        results = search_legal_knowledge(query)
+        
+        return jsonify({
+            "query": query,
+            "results": [
+                {
+                    "title": item["title"],
+                    "content": item["content"],
+                    "category": item["category"],
+                    "relevance": item.get("relevance", 0)
+                }
+                for item in results
+            ],
+            "total": len(results),
+            "search_type": "keyword"
+        })
             
     except Exception as e:
         logger.error(f"Error in search_legal: {str(e)}")
@@ -293,8 +216,8 @@ def search_legal():
 @app.route('/api/legal-data')
 def get_legal_data():
     return jsonify({
-        "data": initial_legal_data,
-        "total": len(initial_legal_data),
+        "data": LEGAL_KNOWLEDGE,
+        "total": len(LEGAL_KNOWLEDGE),
         "last_updated": datetime.utcnow().isoformat()
     })
 
@@ -310,6 +233,5 @@ if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     debug = os.getenv('FLASK_ENV') == 'development'
     
-    logger.info(f"Starting JuSimples API on port {port}")
+    logger.info(f"Starting JuSimples API (Simplified) on port {port}")
     app.run(host='0.0.0.0', port=port, debug=debug)
-
