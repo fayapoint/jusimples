@@ -135,6 +135,15 @@ def home():
         "mode": "simplified"
     })
 
+@app.route('/health')
+def health():
+    return jsonify({
+        "status": "healthy",
+        "timestamp": datetime.utcnow().isoformat(),
+        "ai_system": "operational",
+        "knowledge_base": f"{len(LEGAL_KNOWLEDGE)} documents"
+    })
+
 @app.route('/api/health')
 def health_check():
     return jsonify({
