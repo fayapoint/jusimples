@@ -22,7 +22,11 @@ allowed_origins = os.getenv('CORS_ORIGINS', 'http://localhost:3000,https://jusim
 CORS(app, origins=allowed_origins)
 
 # OpenAI configuration
-client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+try:
+    client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+except Exception as e:
+    logger.error(f"Failed to initialize OpenAI client: {e}")
+    client = None
 
 # Legal knowledge base (simplified approach)
 LEGAL_KNOWLEDGE = [
@@ -82,6 +86,9 @@ def search_legal_knowledge(query: str) -> List[Dict]:
 
 def generate_ai_response(question: str, context: List[Dict]) -> str:
     """Generate AI response using OpenAI with legal context"""
+    if not client:
+        return "Sistema de IA não disponível no momento. Serviço está sendo configurado."
+    
     try:
         # Build context from legal knowledge
         context_text = ""
