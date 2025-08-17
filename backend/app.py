@@ -240,7 +240,7 @@ INSTRUÇÕES:
         
         # Update global client and model on success
         client = fresh_client
-        active_model = "gpt-4o-mini"
+        active_model = "gpt-5-nano"
         
         return ai_response
         
