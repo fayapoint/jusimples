@@ -87,7 +87,9 @@ def initialize_openai_client():
         return False
 
 # Initialize client on startup
-initialize_openai_client()
+logger.info("=== Starting OpenAI client initialization ===")
+success = initialize_openai_client()
+logger.info(f"=== OpenAI client initialization result: {success} ===")
 
 # Legal knowledge base (simplified approach)
 LEGAL_KNOWLEDGE = [
