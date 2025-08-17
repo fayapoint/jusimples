@@ -93,34 +93,25 @@ def initialize_openai_client():
         active_model = None
         return False
 
-# Force immediate OpenAI client initialization
-logger.info("=== FORCING OpenAI client initialization ===")
-logger.info(f"API Key present: {bool(openai_api_key)}")
-logger.info(f"API Key length: {len(openai_api_key) if openai_api_key else 0}")
-logger.info(f"API Key starts correctly: {str(openai_api_key).startswith('sk-') if openai_api_key else False}")
+# Initialize OpenAI client - simplified approach
+logger.info("=== OpenAI Client Initialization ===")
 
-# Force initialization
+# Global client variables
 client = None
 active_model = None
-if openai_api_key and len(openai_api_key.strip()) > 10:
+
+# Simple initialization without complex error handling
+if openai_api_key and openai_api_key.strip() and openai_api_key != 'your_openai_api_key_here':
     try:
-        from openai import OpenAI
         client = OpenAI(api_key=openai_api_key.strip())
         active_model = "gpt-4o-mini"
-        
-        # Test immediately
-        test_response = client.chat.completions.create(
-            model=active_model,
-            messages=[{"role": "user", "content": "Test"}],
-            max_tokens=1
-        )
-        logger.info("✅ FORCED OpenAI client initialization SUCCESS")
+        logger.info(f"✅ OpenAI client initialized with model: {active_model}")
     except Exception as e:
-        logger.error(f"❌ FORCED OpenAI client initialization FAILED: {e}")
+        logger.error(f"❌ OpenAI initialization failed: {e}")
         client = None
         active_model = None
 else:
-    logger.error("❌ Invalid API key for forced initialization")
+    logger.warning("❌ No valid OpenAI API key found")
 
 # Legal knowledge base (simplified approach)
 LEGAL_KNOWLEDGE = [
