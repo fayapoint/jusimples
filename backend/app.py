@@ -93,10 +93,14 @@ def initialize_openai_client():
         active_model = None
         return False
 
-# Initialize client on startup
+# Initialize client on startup - but don't fail if it doesn't work initially
 logger.info("=== Starting OpenAI client initialization ===")
-success = initialize_openai_client()
-logger.info(f"=== OpenAI client initialization result: {success} ===")
+try:
+    success = initialize_openai_client()
+    logger.info(f"=== OpenAI client initialization result: {success} ===")
+except Exception as e:
+    logger.error(f"=== OpenAI client initialization failed: {e} ===")
+    logger.info("=== Will retry initialization on first request ===")
 
 # Legal knowledge base (simplified approach)
 LEGAL_KNOWLEDGE = [
@@ -272,6 +276,10 @@ def ask_question():
             ],
             "confidence": 0.85,
             "timestamp": datetime.utcnow().isoformat(),
+            "system_status": {
+                "openai_available": client is not None,
+                "knowledge_base_size": len(relevant_context)
+            },
             "disclaimer": "Esta resposta é baseada em IA e tem caráter informativo. Para casos complexos, consulte um advogado especializado.",
             "debug_info": {
                 "openai_available": client is not None,
