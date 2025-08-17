@@ -251,13 +251,14 @@ INSTRUÇÕES:
 
 @app.route('/')
 def home():
-    """Home endpoint with deployment info - VERSION 2.3.0"""
+    """Home endpoint with deployment info - VERSION 2.5.0"""
     return jsonify({
-        "message": "JuSimples Legal AI API",
-        "version": "2.3.0",
+        "message": "JuSimples Legal AI API - CACHE BUSTED",
+        "version": "2.5.0",
         "status": "running",
         "mode": "simplified",
         "deployment_time": datetime.now().isoformat(),
+        "cache_bust": "20250117_2010",
         "endpoints": ["/api/ask", "/api/test-rag", "/health", "/admin/"]
     })
 
