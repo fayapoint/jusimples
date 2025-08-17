@@ -63,13 +63,20 @@ def start_server():
     try:
         from app import app
         
-        port = int(os.getenv('PORT', 5000))
-        debug = os.getenv('FLASK_ENV') == 'development'
+        # Railway uses PORT environment variable
+        port = int(os.getenv('PORT', 8080))
+        debug = os.getenv('FLASK_ENV', 'production') == 'development'
         
         logger.info(f"Starting JuSimples API server on port {port}")
         logger.info(f"Debug mode: {debug}")
+        logger.info(f"Environment: {os.getenv('FLASK_ENV', 'production')}")
         
-        app.run(host='0.0.0.0', port=port, debug=debug)
+        # Use production WSGI server for production
+        if debug:
+            app.run(host='0.0.0.0', port=port, debug=debug)
+        else:
+            # Production mode
+            app.run(host='0.0.0.0', port=port, debug=False, threaded=True)
         
     except Exception as e:
         logger.error(f"Error starting server: {str(e)}")
