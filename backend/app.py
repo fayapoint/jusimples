@@ -250,7 +250,7 @@ INSTRUÇÕES:
 def home():
     return jsonify({
         "message": "JuSimples Legal AI API",
-        "version": "2.2.0",
+        "version": "2.3.0",
         "status": "running",
         "mode": "simplified",
         "deployment_timestamp": datetime.utcnow().isoformat()
