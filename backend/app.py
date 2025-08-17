@@ -7,6 +7,7 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 from dotenv import load_dotenv
 from openai import OpenAI
+from admin_dashboard import admin_bp
 
 # Load environment variables
 load_dotenv()
@@ -16,6 +17,9 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
+
+# Register admin dashboard blueprint
+app.register_blueprint(admin_bp)
 
 # CORS configuration
 allowed_origins = os.getenv('CORS_ORIGINS', 'http://localhost:3000,https://jusimples.netlify.app,https://jusimplesbeta.netlify.app').split(',')
