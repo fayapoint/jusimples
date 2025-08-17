@@ -249,9 +249,23 @@ def api_status():
     """API endpoint for system status"""
     from app import client, LEGAL_KNOWLEDGE, active_model
     
+    # Test OpenAI client availability
+    openai_available = False
+    if client:
+        try:
+            # Quick test call
+            test_response = client.chat.completions.create(
+                model=active_model or "gpt-4o-mini",
+                messages=[{"role": "user", "content": "Test"}],
+                max_tokens=1
+            )
+            openai_available = True
+        except:
+            openai_available = False
+    
     return jsonify({
-        "system": "Operacional" if client else "Com problemas",
-        "openai_client": "Disponível" if client else "Não disponível",
+        "system": "Operacional" if openai_available else "Com problemas",
+        "openai_client": "Disponível" if openai_available else "Não disponível",
         "active_model": active_model or "Não configurado",
         "knowledge_base": f"{len(LEGAL_KNOWLEDGE)} documentos",
         "last_update": datetime.utcnow().isoformat()

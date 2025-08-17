@@ -45,9 +45,12 @@ def initialize_openai_client():
     
     if not openai_api_key or openai_api_key == 'your_openai_api_key_here' or len(openai_api_key.strip()) <= 10:
         logger.warning(f"OpenAI API key invalid: key={'exists' if openai_api_key else 'missing'}, length={len(openai_api_key) if openai_api_key else 0}")
+        client = None
+        active_model = None
         return False
     
     try:
+        # Create client first
         test_client = OpenAI(api_key=openai_api_key.strip())
         preferred_model = os.getenv('OPENAI_MODEL', 'gpt-4o-mini')
         
@@ -67,18 +70,22 @@ def initialize_openai_client():
         except Exception as model_error:
             logger.warning(f"❌ Preferred model {preferred_model} failed: {str(model_error)}")
             
-            # Fallback to gpt-4o-mini
+            # Try fallback model only if different
             fallback_model = "gpt-4o-mini"
-            logger.info(f"🔄 Trying fallback model: {fallback_model}")
-            test_response = test_client.chat.completions.create(
-                model=fallback_model,
-                messages=[{"role": "user", "content": "Test"}],
-                max_tokens=5
-            )
-            client = test_client
-            active_model = fallback_model
-            logger.info(f"✅ OpenAI client initialized with fallback model: {fallback_model}")
-            return True
+            if fallback_model != preferred_model:
+                logger.info(f"🔄 Trying fallback model: {fallback_model}")
+                test_response = test_client.chat.completions.create(
+                    model=fallback_model,
+                    messages=[{"role": "user", "content": "Test"}],
+                    max_tokens=5
+                )
+                client = test_client
+                active_model = fallback_model
+                logger.info(f"✅ OpenAI client initialized with fallback model: {fallback_model}")
+                return True
+            else:
+                # Same model failed, don't retry
+                raise model_error
             
     except Exception as e:
         logger.error(f"❌ Failed to initialize OpenAI client: {type(e).__name__}: {str(e)}")
@@ -147,49 +154,55 @@ def search_legal_knowledge(query: str) -> List[Dict]:
     results.sort(key=lambda x: x["relevance"], reverse=True)
     return results[:3]  # Return top 3 results
 
-def generate_ai_response(question: str, context: List[Dict]) -> str:
-    """Generate AI response using OpenAI with legal context"""
+def generate_ai_response(question, relevant_context):
+    """Generate AI response using OpenAI with relevant legal context"""
+    # Re-initialize client if not available
     if not client:
-        return "Sistema de IA não disponível no momento. Serviço está sendo configurado."
+        logger.info("Client not available, attempting to re-initialize...")
+        initialize_success = initialize_openai_client()
+        if not initialize_success:
+            return "Sistema de IA não disponível no momento. Serviço está sendo configurado."
     
     try:
-        context_text = ""
-        if context:
-            context_text = "Contexto legal relevante:\n"
-            for item in context:
-                context_text += f"- {item['title']}: {item['content']}\n"
-
-        prompt = f"""Você é um assistente jurídico especializado em direito brasileiro. 
-        Responda a pergunta de forma clara, precisa e acessível para pessoas sem conhecimento jurídico avançado.
-
-        {context_text}
-
-        Pergunta: {question}
-
-        Forneça uma resposta estruturada que inclua:
-        1. Resposta direta e clara
-        2. Base legal quando aplicável
-        3. Orientações práticas
-        4. Recomendação de consultar um advogado para casos complexos
-
-        Mantenha a resposta concisa mas completa."""
-
-        # Use the active model that was successfully tested
-        model_to_use = active_model or os.getenv('OPENAI_MODEL', 'gpt-4o-mini')
-        logger.info(f"Generating response with model: {model_to_use}")
+        # Prepare context for the AI
+        context_text = "\n\n".join([
+            f"**{doc['title']}** (Categoria: {doc['category']})\n{doc['content']}"
+            for doc in relevant_context
+        ])
         
+        prompt = f"""Você é um assistente jurídico especializado em direito brasileiro. 
+        
+Baseando-se exclusivamente no contexto legal fornecido abaixo, responda à pergunta do usuário de forma clara, precisa e acessível.
+
+CONTEXTO LEGAL:
+{context_text}
+
+PERGUNTA: {question}
+
+INSTRUÇÕES:
+- Use apenas as informações do contexto fornecido
+- Seja claro e objetivo
+- Use linguagem acessível ao cidadão comum
+- Se a pergunta não puder ser respondida com o contexto disponível, informe isso
+- Sempre mencione a fonte legal relevante (artigo, lei, etc.)"""
+
         response = client.chat.completions.create(
-            model=model_to_use,
-            messages=[{"role": "user", "content": prompt}],
+            model=active_model or "gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "Você é um assistente jurídico especializado em direito brasileiro."},
+                {"role": "user", "content": prompt}
+            ],
             max_tokens=500,
             temperature=0.3
         )
         
-        return response.choices[0].message.content
+        return response.choices[0].message.content.strip()
         
     except Exception as e:
-        logger.error(f"Error generating AI response: {str(e)}")
-        return "Não foi possível gerar uma resposta no momento. Tente novamente ou consulte um advogado."
+        logger.error(f"Error generating AI response: {e}")
+        # Try to re-initialize on error
+        initialize_openai_client()
+        return "Erro ao processar sua pergunta. Tente novamente em alguns instantes."
 
 @app.route('/')
 def home():
