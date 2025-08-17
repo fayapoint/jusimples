@@ -1,13 +1,3 @@
-const express = require('express');
-const app = express();
-const port = 3001;
-
-app.get('/', (req, res) => {
-  res.send('Backend do JuSimples está funcionando!');
-});
-
-app.listen(port, () => {
-  console.log(`Backend do JuSimples rodando em http://localhost:${port}`);
-});
-
-
+// This file is deprecated and replaced by app.py
+// The backend now uses Python Flask with RAG architecture
+// To start the backend, run: python app.py

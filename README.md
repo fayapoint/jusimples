@@ -1,112 +1,132 @@
-# JuSimples - Legal AI Assistant
+# JuSimples - Legal AI Assistant Platform
 
-A sophisticated legal AI platform that democratizes access to justice through advanced artificial intelligence, designed specifically for the Brazilian legal system.
+## 🎯 Vision
+JuSimples is a revolutionary legal AI platform designed to democratize access to legal information in Brazil. Using advanced Retrieval-Augmented Generation (RAG) architecture, we provide accurate, contextual legal guidance to both ordinary citizens and legal professionals.
 
-## 🚀 Features
+## ✨ Features
 
-- **Extraordinary Minimalistic Design**: Dark theme with glassmorphism effects and premium typography
-- **AI-Powered Legal Assistance**: Get precise legal guidance in seconds
-- **Responsive Interface**: Optimized for all devices with smooth animations
-- **Brazilian Legal Focus**: Trained on Brazilian laws and regulations
-- **LGPD Compliant**: Built with privacy and data protection in mind
+### For Citizens
+- **Simple Legal Consultation**: Ask legal questions in plain Portuguese
+- **Document Analysis**: Upload and analyze legal documents
+- **Rights Information**: Learn about your fundamental rights
+- **Process Guidance**: Step-by-step guidance for legal procedures
 
-## 🎨 Design Highlights
-
-- **Modern Dark Theme**: Sophisticated color palette with subtle gradients
-- **Glassmorphism Effects**: Backdrop blur and premium visual effects
-- **Micro-interactions**: Smooth animations and elegant transitions
-- **Centered Chat Interface**: Clean, focused user experience
-- **Premium Typography**: Perfect spacing and hierarchy
+### For Legal Professionals
+- **Advanced Legal Research**: Semantic search across Brazilian legal corpus
+- **Case Law Analysis**: AI-powered analysis of jurisprudence
+- **Document Generation**: Automated legal document templates
+- **Compliance Checking**: LGPD and regulatory compliance tools
 
 ## 🛠 Technology Stack
 
 ### Frontend
-- **React 19** - Modern UI framework
-- **Lucide React** - Beautiful icons
-- **CSS3** - Custom styling with CSS variables
-- **Responsive Design** - Mobile-first approach
+- **React 19**: Modern UI framework with latest features
+- **Framer Motion**: Smooth animations and micro-interactions
+- **Lucide React**: Beautiful icon library
+- **Axios**: API communication
+- **CSS Variables**: Dark theme with glassmorphism effects
 
-### Backend
-- **Python Flask** - Lightweight web framework
-- **Flask-CORS** - Cross-origin resource sharing
-- **BeautifulSoup** - Web scraping for legal data
-- **Requests** - HTTP library
+### Backend (RAG Architecture)
+- **Python Flask**: RESTful API framework
+- **LangChain**: LLM orchestration and RAG pipeline
+- **ChromaDB**: Vector database for semantic search
+- **OpenAI GPT-4**: Language model for AI responses
+- **Sentence Transformers**: Text embeddings
+- **BeautifulSoup**: Legal document scraping
+- **LexML Integration**: Brazilian legal data collection
 
-## 📋 Project Structure
+### Infrastructure
+- **Docker**: Containerization
+- **PostgreSQL**: Primary database (planned)
+- **Redis**: Caching layer (planned)
+- **Nginx**: Reverse proxy (planned)
+- **Cloud Deployment**: AWS/GCP ready
+
+## 🚀 Quick Start
+
+### Prerequisites
+- Node.js 16+
+- Python 3.8+
+- Git
+
+### Automated Setup
+
+1. **Clone the repository**
+```bash
+git clone https://github.com/fayapoint/jusimples.git
+cd jusimples
+```
+
+2. **Run setup script**
+```bash
+python setup.py
+```
+
+3. **Configure API keys**
+```bash
+# Edit backend/.env with your API keys
+# At minimum, set OPENAI_API_KEY for AI functionality
+```
+
+4. **Start the application**
+```bash
+# Terminal 1 - Backend
+cd backend
+python start_backend.py
+
+# Terminal 2 - Frontend
+cd frontend
+npm start
+```
+
+5. **Access the Application**
+- Frontend: http://localhost:3000
+- Backend API: http://localhost:5000
+
+### Manual Setup
+
+#### Backend Setup
+```bash
+cd backend
+python -m venv venv
+venv\Scripts\activate  # On Windows
+# source venv/bin/activate  # On Linux/Mac
+pip install -r requirements.txt
+cp .env.example .env
+# Configure your API keys in .env
+python start_backend.py
+```
+
+#### Frontend Setup
+```bash
+cd frontend
+npm install
+npm start
+```
+
+## 📊 Project Structure
 
 ```
 jusimples/
-├── frontend/                 # React frontend application
+├── frontend/                    # React application
 │   ├── src/
-│   │   ├── App.js           # Main application component
-│   │   ├── App.css          # Sophisticated styling
-│   │   └── index.js         # Application entry point
-│   └── package.json         # Frontend dependencies
-├── backend/                  # Python Flask backend
-│   ├── app.py              # Flask application with API endpoints
-│   ├── server.js           # Node.js server (legacy)
-│   └── package.json        # Backend dependencies
-├── node_modules/            # Node.js dependencies
-├── package.json            # Root package configuration
-└── README.md               # Project documentation
+│   │   ├── App.js              # Main app component
+│   │   ├── App.css             # Sophisticated dark theme
+│   │   └── index.js            # Entry point
+│   ├── public/                 # Static assets
+│   └── package.json            # Dependencies
+├── backend/                    # Python Flask API with RAG
+│   ├── app.py                  # Main Flask app with RAG system
+│   ├── lexml_scraper.py        # Legal document scraper
+│   ├── data_collector.py       # Data collection service
+│   ├── start_backend.py        # Backend startup script
+│   ├── test_rag_system.py      # RAG system tests
+│   ├── requirements.txt        # Python dependencies
+│   ├── .env.example           # Environment configuration
+│   └── chroma_db/             # Vector database storage
+├── setup.py                   # Automated setup script
+└── README.md                  # This file
 ```
-
-## 🚀 Getting Started
-
-### Prerequisites
-- Node.js 16+ 
-- Python 3.8+
-- npm or yarn
-
-### Installation
-
-1. **Clone the repository**
-   ```bash
-   git clone git@github.com:fayapoint/jusimples.git
-   cd jusimples
-   ```
-
-2. **Install frontend dependencies**
-   ```bash
-   cd frontend
-   npm install react-router-dom axios framer-motion lucide-react
-   ```
-
-3. **Install backend dependencies**
-   ```bash
-   cd ../backend
-   pip install flask flask-cors requests beautifulsoup4
-   ```
-
-### Running the Application
-
-1. **Start the backend server**
-   ```bash
-   cd backend
-   python app.py
-   ```
-   Backend will run on `http://localhost:5000`
-
-2. **Start the frontend development server**
-   ```bash
-   cd frontend
-   npm start
-   ```
-   Frontend will run on `http://localhost:3000`
-
-3. **Open your browser** and navigate to `http://localhost:3000`
-
-## 📖 Usage
-
-1. **Ask Legal Questions**: Type your legal question in the chat interface
-2. **Get AI Responses**: Receive precise legal guidance based on Brazilian law
-3. **Interactive Experience**: Enjoy smooth animations and premium UX
-
-## 🎯 MVP Roadmap
-
-- [x] **Phase 1**: Extraordinary minimalistic frontend with sophisticated UX
-- [ ] **Phase 2**: RAG architecture with vector database integration
-- [ ] **Phase 3**: Legal data collection from LexML portal
 - [ ] **Phase 4**: Advanced LLM integration (GPT-4/Claude)
 - [ ] **Phase 5**: User authentication and management
 - [ ] **Phase 6**: LGPD compliance and security measures
