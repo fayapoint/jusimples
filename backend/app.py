@@ -188,7 +188,7 @@ def generate_ai_response(question, relevant_context):
     
     # FORCE RETURN REAL RESPONSE FOR TESTING
     if "teste" in question.lower():
-        return f"✅ VERSÃO 2.2.0 ATIVA! Pergunta recebida: {question}. Sistema OpenAI funcionando corretamente."
+        return f"✅ VERSÃO 2.3.0 ATIVA! Pergunta recebida: {question}. Sistema OpenAI funcionando corretamente."
     
     # Check if we have a valid API key
     if not openai_api_key or openai_api_key.strip() == 'your_openai_api_key_here' or len(openai_api_key.strip()) < 20:
@@ -251,12 +251,14 @@ INSTRUÇÕES:
 
 @app.route('/')
 def home():
+    """Home endpoint with deployment info - VERSION 2.3.0"""
     return jsonify({
         "message": "JuSimples Legal AI API",
         "version": "2.3.0",
         "status": "running",
         "mode": "simplified",
-        "deployment_timestamp": datetime.utcnow().isoformat()
+        "deployment_time": datetime.now().isoformat(),
+        "endpoints": ["/api/ask", "/api/test-rag", "/health", "/admin/"]
     })
 
 @app.route('/health')
