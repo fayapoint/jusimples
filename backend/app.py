@@ -2,12 +2,16 @@ import os
 import sys
 import time
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Dict, Any
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from openai import OpenAI
 import json
+import sqlite3
+from functools import wraps
+import jwt
+from werkzeug.security import generate_password_hash, check_password_hash
 
 # Load environment variables only if .env file exists
 try:
@@ -107,6 +111,73 @@ def initialize_openai_client():
 # Initialize OpenAI client (single path)
 logger.info("=== OpenAI Client Initialization ===")
 initialize_openai_client()
+
+# ======================
+# Authentication & Users
+# ======================
+# Environment
+JWT_SECRET = os.getenv('JWT_SECRET_KEY', os.getenv('SECRET_KEY', 'dev_secret'))
+JWT_EXPIRES = int(os.getenv('JWT_ACCESS_TOKEN_EXPIRES', '3600'))  # seconds
+
+# Database (SQLite)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+db_url = os.getenv('DATABASE_URL', f"sqlite:///{os.path.join(BASE_DIR, 'jusimples.db')}")
+if db_url.startswith('sqlite:///'):
+    DB_PATH = db_url.replace('sqlite:///', '')
+else:
+    # Fallback to local file if format differs
+    DB_PATH = os.path.join(BASE_DIR, 'jusimples.db')
+
+def get_db_connection():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def init_user_table():
+    try:
+        conn = get_db_connection()
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                email TEXT UNIQUE NOT NULL,
+                name TEXT NOT NULL,
+                password_hash TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.commit()
+        conn.close()
+        logger.info("✅ Users table ensured in SQLite")
+    except Exception as e:
+        logger.error(f"❌ Failed to init users table: {e}")
+
+def create_token(payload: Dict[str, Any]) -> str:
+    expire = datetime.utcnow() + timedelta(seconds=JWT_EXPIRES)
+    payload = {**payload, 'exp': expire}
+    return jwt.encode(payload, JWT_SECRET, algorithm='HS256')
+
+def decode_token(token: str) -> Dict[str, Any]:
+    return jwt.decode(token, JWT_SECRET, algorithms=['HS256'])
+
+def auth_required(f):
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        auth = request.headers.get('Authorization', '')
+        if not auth.startswith('Bearer '):
+            return jsonify({'error': 'Unauthorized'}), 401
+        token = auth.split(' ', 1)[1]
+        try:
+            user = decode_token(token)
+            request.user = user
+        except Exception as e:
+            return jsonify({'error': 'Invalid or expired token', 'detail': str(e)}), 401
+        return f(*args, **kwargs)
+    return wrapper
+
+# Ensure DB table exists on startup
+init_user_table()
 
 # Legal knowledge base (simplified approach)
 LEGAL_KNOWLEDGE = [
@@ -468,6 +539,128 @@ def get_legal_data():
         "total": len(LEGAL_KNOWLEDGE),
         "last_updated": datetime.utcnow().isoformat()
     })
+
+# ======================
+# Auth Endpoints
+# ======================
+@app.route('/auth/register', methods=['POST'])
+def register():
+    try:
+        data = request.get_json() or {}
+        email = (data.get('email') or '').strip().lower()
+        name = (data.get('name') or '').strip()
+        password = data.get('password') or ''
+        if not email or not name or not password or len(password) < 6:
+            return jsonify({'error': 'Dados inválidos'}), 400
+
+        conn = get_db_connection()
+        cur = conn.execute('SELECT id FROM users WHERE email = ?', (email,))
+        if cur.fetchone():
+            conn.close()
+            return jsonify({'error': 'E-mail já cadastrado'}), 409
+
+        pwd_hash = generate_password_hash(password)
+        now_iso = datetime.utcnow().isoformat()
+        conn.execute(
+            'INSERT INTO users (email, name, password_hash, created_at) VALUES (?, ?, ?, ?)',
+            (email, name, pwd_hash, now_iso)
+        )
+        conn.commit()
+        conn.close()
+
+        token = create_token({'email': email, 'name': name})
+        return jsonify({'token': token, 'user': {'email': email, 'name': name, 'created_at': now_iso}})
+    except Exception as e:
+        logger.error(f"Register error: {e}", exc_info=True)
+        return jsonify({'error': 'Falha no cadastro'}), 500
+
+@app.route('/auth/login', methods=['POST'])
+def login():
+    try:
+        data = request.get_json() or {}
+        email = (data.get('email') or '').strip().lower()
+        password = data.get('password') or ''
+        if not email or not password:
+            return jsonify({'error': 'Credenciais inválidas'}), 400
+
+        conn = get_db_connection()
+        cur = conn.execute('SELECT id, email, name, password_hash, created_at FROM users WHERE email = ?', (email,))
+        row = cur.fetchone()
+        conn.close()
+        if not row or not check_password_hash(row['password_hash'], password):
+            return jsonify({'error': 'E-mail ou senha incorretos'}), 401
+
+        token = create_token({'email': row['email'], 'name': row['name']})
+        return jsonify({'token': token, 'user': {'email': row['email'], 'name': row['name'], 'created_at': row['created_at']}})
+    except Exception as e:
+        logger.error(f"Login error: {e}", exc_info=True)
+        return jsonify({'error': 'Falha no login'}), 500
+
+@app.route('/auth/me')
+@auth_required
+def me():
+    try:
+        user_claim = getattr(request, 'user', {})
+        email = user_claim.get('email')
+        conn = get_db_connection()
+        cur = conn.execute('SELECT email, name, created_at FROM users WHERE email = ?', (email,))
+        row = cur.fetchone()
+        conn.close()
+        if not row:
+            return jsonify({'error': 'Usuário não encontrado'}), 404
+        return jsonify({'user': {'email': row['email'], 'name': row['name'], 'created_at': row['created_at']}})
+    except Exception as e:
+        logger.error(f"Me error: {e}", exc_info=True)
+        return jsonify({'error': 'Falha ao obter usuário'}), 500
+
+# ======================
+# Content Endpoints (Footer)
+# ======================
+@app.route('/api/news')
+def api_news():
+    base_thumb = 'https://picsum.photos/seed'
+    items = [
+        {
+            'id': 1,
+            'title': 'STF decide sobre marco importante do direito do consumidor',
+            'summary': 'Corte define parâmetros para garantias e práticas comerciais, impactando milhões de consumidores em todo o país.',
+            'thumbnail': f"{base_thumb}/jusimples1/96/64",
+            'url': 'https://www.stf.jus.br/'
+        },
+        {
+            'id': 2,
+            'title': 'Nova resolução do CNJ moderniza serviços judiciais digitais',
+            'summary': 'Medida incentiva padronização e transparência nos tribunais, ampliando o acesso à justiça e eficiência.',
+            'thumbnail': f"{base_thumb}/jusimples2/96/64",
+            'url': 'https://www.cnj.jus.br/'
+        },
+        {
+            'id': 3,
+            'title': 'Lei Geral de Proteção de Dados: guia prático para cidadãos',
+            'summary': 'Entenda seus direitos, como solicitar seus dados e como denunciar abuso de uso de informação pessoal.',
+            'thumbnail': f"{base_thumb}/jusimples3/96/64",
+            'url': 'https://www.gov.br/anpd/pt-br'
+        }
+    ]
+    return jsonify({'news': items, 'total': len(items), 'timestamp': datetime.utcnow().isoformat()})
+
+@app.route('/api/ads')
+def api_ads():
+    ads = [
+        {
+            'id': 'a1',
+            'title': 'Seguro Jurídico Familiar a partir de R$12/mês',
+            'image': 'https://picsum.photos/seed/jusad1/320/100',
+            'url': 'https://example.com/seguro-juridico'
+        },
+        {
+            'id': 'a2',
+            'title': 'Cursos de Direito Digital - Inscrições Abertas',
+            'image': 'https://picsum.photos/seed/jusad2/320/100',
+            'url': 'https://example.com/curso-direito-digital'
+        }
+    ]
+    return jsonify({'ads': ads, 'total': len(ads)})
 
 @app.errorhandler(404)
 def not_found(error):

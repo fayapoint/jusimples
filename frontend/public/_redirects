@@ -1,5 +1,7 @@
-# SPA fallback - all routes should serve index.html
-/*    /index.html   200
+# API and Auth proxy redirects (replace with your actual backend URL after deployment)
+/api/*    https://your-backend-url.com/api/:splat    200
+/auth/*   https://your-backend-url.com/auth/:splat   200
+/admin/*  https://your-backend-url.com/admin/:splat  200
 
-# API proxy redirects (replace with your actual backend URL after deployment)
-/api/*  https://your-backend-url.com/api/:splat  200
+# SPA fallback - place after proxy rules
+/*       /index.html   200
