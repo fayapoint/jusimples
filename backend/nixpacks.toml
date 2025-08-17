@@ -8,4 +8,8 @@ cmds = ['pip install -r requirements.txt']
 cmds = ['echo "Build completed"']
 
 [start]
-cmd = 'python start_backend.py'
+cmd = 'python wsgi.py'
+
+[variables]
+PORT = '8080'
+FLASK_ENV = 'production'

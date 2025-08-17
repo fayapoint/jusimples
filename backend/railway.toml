@@ -11,3 +11,4 @@ restartPolicyMaxRetries = 10
 [environment]
 PYTHONPATH = "/app"
 PORT = "8080"
+FLASK_ENV = "production"

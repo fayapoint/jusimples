@@ -44,19 +44,19 @@ function App() {
       {/* Header */}
       <header className="header">
         <nav className="nav-container">
-          <a href="#" className="logo">
+          <a href="/" className="logo">
             <Scale size={24} />
             JuSimples
           </a>
           <div className="nav-buttons">
-            <a href="#" className="btn btn-outline">
+            <button className="btn btn-outline" onClick={() => console.log('Cadastrar clicked')}>
               <UserPlus size={16} />
               Cadastrar
-            </a>
-            <a href="#" className="btn btn-primary">
+            </button>
+            <button className="btn btn-primary" onClick={() => console.log('Login clicked')}>
               <LogIn size={16} />
               Login
-            </a>
+            </button>
           </div>
         </nav>
       </header>
