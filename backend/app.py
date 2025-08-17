@@ -181,30 +181,19 @@ def generate_ai_response(question, relevant_context):
     """Generate AI response using OpenAI with relevant legal context"""
     global client, active_model
     
-    # ALWAYS force client initialization for every request
-    logger.info("FORCING OpenAI client initialization for every request...")
-    if openai_api_key and openai_api_key.strip() and openai_api_key != 'your_openai_api_key_here':
-        try:
-            client = OpenAI(api_key=openai_api_key.strip())
-            active_model = "gpt-4o-mini"
-            logger.info("✅ OpenAI client force-initialized successfully")
-            
-            # Test the client immediately
-            test_response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[{"role": "user", "content": "Test"}],
-                max_tokens=1
-            )
-            logger.info("✅ OpenAI client test call successful")
-            
-        except Exception as init_error:
-            logger.error(f"❌ Failed to force-initialize OpenAI client: {init_error}")
-            return f"Erro na inicialização do OpenAI: {str(init_error)}"
-    else:
-        logger.error("❌ No valid API key for OpenAI initialization")
-        return "API key do OpenAI não configurada corretamente."
+    logger.info(f"🔄 Starting AI response generation for: {question[:50]}...")
     
+    # Check if we have a valid API key
+    if not openai_api_key or openai_api_key.strip() == 'your_openai_api_key_here' or len(openai_api_key.strip()) < 20:
+        error_msg = f"❌ Invalid OpenAI API key: length={len(openai_api_key) if openai_api_key else 0}"
+        logger.error(error_msg)
+        return f"Erro: {error_msg}"
+    
+    # Create a fresh OpenAI client for this request
     try:
+        logger.info("🔧 Creating fresh OpenAI client...")
+        fresh_client = OpenAI(api_key=openai_api_key.strip())
+        
         # Prepare context for the AI
         context_text = "\n\n".join([
             f"**{doc['title']}** (Categoria: {doc['category']})\n{doc['content']}"
@@ -212,7 +201,7 @@ def generate_ai_response(question, relevant_context):
         ])
         
         prompt = f"""Você é um assistente jurídico especializado em direito brasileiro. 
-        
+
 Baseando-se exclusivamente no contexto legal fornecido abaixo, responda à pergunta do usuário de forma clara, precisa e acessível.
 
 CONTEXTO LEGAL:
@@ -227,12 +216,9 @@ INSTRUÇÕES:
 - Se a pergunta não puder ser respondida com o contexto disponível, informe isso
 - Sempre mencione a fonte legal relevante (artigo, lei, etc.)"""
 
-        logger.info(f"Making OpenAI API call with model: {active_model}")
-        logger.info(f"API Key configured: {bool(openai_api_key)}")
-        logger.info(f"Client object exists: {client is not None}")
-        
-        response = client.chat.completions.create(
-            model=active_model or "gpt-4o-mini",
+        logger.info("🚀 Making OpenAI API call...")
+        response = fresh_client.chat.completions.create(
+            model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": "Você é um assistente jurídico especializado em direito brasileiro."},
                 {"role": "user", "content": prompt}
@@ -242,13 +228,19 @@ INSTRUÇÕES:
         )
         
         ai_response = response.choices[0].message.content.strip()
-        logger.info(f"✅ OpenAI API call successful, response length: {len(ai_response)}")
-        logger.info(f"Response preview: {ai_response[:100]}...")
+        logger.info(f"✅ SUCCESS! OpenAI response received, length: {len(ai_response)}")
+        logger.info(f"📝 Response preview: {ai_response[:100]}...")
+        
+        # Update global client and model on success
+        client = fresh_client
+        active_model = "gpt-4o-mini"
+        
         return ai_response
         
     except Exception as e:
-        logger.error(f"❌ Error generating AI response: {type(e).__name__}: {str(e)}")
-        return f"Erro ao processar sua pergunta: {str(e)}"
+        error_msg = f"❌ OpenAI API Error: {type(e).__name__}: {str(e)}"
+        logger.error(error_msg)
+        return f"Erro na consulta à IA: {str(e)}"
 
 @app.route('/')
 def home():
