@@ -4,14 +4,14 @@ FROM python:3.11-slim
 # Set working directory
 WORKDIR /app
 
-# Copy everything first
-COPY . .
+# Copy Python dependencies first for better caching
+COPY backend/requirements.txt /app/requirements.txt
 
 # Install Python dependencies
-RUN pip install --no-cache-dir -r backend/requirements.txt
+RUN pip install --no-cache-dir -r /app/requirements.txt
 
-# Set working directory to backend
-WORKDIR /app/backend
+# Copy backend source code
+COPY backend/ /app
 
 # Expose port 5000
 EXPOSE 5000

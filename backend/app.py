@@ -63,7 +63,7 @@ def initialize_openai_client():
     try:
         # Create client first
         test_client = OpenAI(api_key=openai_api_key.strip())
-        preferred_model = os.getenv('OPENAI_MODEL', 'gpt-4o-mini')
+        preferred_model = os.getenv('OPENAI_MODEL', 'gpt-5-nano')
         
         # Try preferred model first
         try:
@@ -115,7 +115,7 @@ active_model = None
 try:
     if openai_api_key and openai_api_key.strip() and openai_api_key != 'your_openai_api_key_here':
         client = OpenAI(api_key=openai_api_key.strip())
-        active_model = "gpt-4o-mini"
+        active_model = "gpt-5-nano"
         logger.info(f"✅ OpenAI client initialized with model: {active_model}")
     else:
         logger.warning("❌ No valid OpenAI API key found")
@@ -225,7 +225,7 @@ INSTRUÇÕES:
 
         logger.info("🚀 [v2.2.0] Making OpenAI API call...")
         response = fresh_client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="gpt-5-nano",
             messages=[
                 {"role": "system", "content": "Você é um assistente jurídico especializado em direito brasileiro."},
                 {"role": "user", "content": prompt}
@@ -397,7 +397,7 @@ def test_rag():
         if not client and openai_api_key and openai_api_key.strip():
             try:
                 client = OpenAI(api_key=openai_api_key.strip())
-                active_model = "gpt-4o-mini"
+                active_model = "gpt-5-nano"
                 logger.info("✅ OpenAI client force-initialized for RAG test")
             except Exception as e:
                 logger.error(f"❌ Failed to initialize OpenAI for RAG test: {e}")
@@ -433,7 +433,7 @@ def switch_model():
     """Switch OpenAI model and reinitialize client"""
     try:
         data = request.get_json()
-        new_model = data.get('model', 'gpt-4o-mini')
+        new_model = data.get('model', 'gpt-5-nano')
         
         # Update environment variable temporarily
         os.environ['OPENAI_MODEL'] = new_model
