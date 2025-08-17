@@ -36,12 +36,20 @@ try:
         # Initialize client and test it immediately
         test_client = OpenAI(api_key=openai_api_key.strip())
         
-        # Test the client with actual model
-        test_response = test_client.chat.completions.create(
-            model=os.getenv('OPENAI_MODEL', 'gpt-5-nano'),
-            messages=[{"role": "user", "content": "Test"}],
-            max_tokens=5
-        )
+        # Test the client with fallback model first
+        try:
+            test_response = test_client.chat.completions.create(
+                model=os.getenv('OPENAI_MODEL', 'gpt-4o-mini'),
+                messages=[{"role": "user", "content": "Test"}],
+                max_tokens=5
+            )
+        except Exception as model_error:
+            logger.warning(f"Model {os.getenv('OPENAI_MODEL', 'gpt-5-nano')} failed, trying gpt-4o-mini: {str(model_error)}")
+            test_response = test_client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": "Test"}],
+                max_tokens=5
+            )
         
         client = test_client
         logger.info(f"OpenAI client initialized and tested successfully with model: {os.getenv('OPENAI_MODEL', 'gpt-5-nano')}")
