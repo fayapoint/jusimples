@@ -342,7 +342,7 @@ def api_status():
     if client:
         try:
             _ = client.chat.completions.create(
-                model=active_model or "gpt-5-nano",
+                model=active_model or os.getenv('OPENAI_MODEL') or "gpt-5-nano",
                 messages=[{"role": "user", "content": "ping"}],
                 max_tokens=1
             )
