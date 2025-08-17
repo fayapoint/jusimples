@@ -49,7 +49,7 @@ def initialize_openai_client():
     
     try:
         test_client = OpenAI(api_key=openai_api_key.strip())
-        preferred_model = os.getenv('OPENAI_MODEL', 'gpt-5-nano')
+        preferred_model = os.getenv('OPENAI_MODEL', 'gpt-4o-mini')
         
         # Try preferred model first
         try:

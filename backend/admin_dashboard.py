@@ -250,7 +250,7 @@ def api_status():
     from app import client, LEGAL_KNOWLEDGE, active_model
     
     return jsonify({
-        "system": "Operacional",
+        "system": "Operacional" if client else "Com problemas",
         "openai_client": "Disponível" if client else "Não disponível",
         "active_model": active_model or "Não configurado",
         "knowledge_base": f"{len(LEGAL_KNOWLEDGE)} documentos",
