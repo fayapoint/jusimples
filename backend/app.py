@@ -246,9 +246,10 @@ INSTRUÇÕES:
 def home():
     return jsonify({
         "message": "JuSimples Legal AI API",
-        "version": "2.1.0",
+        "version": "2.1.1",
         "status": "running",
-        "mode": "simplified"
+        "mode": "simplified",
+        "deployment_timestamp": datetime.utcnow().isoformat()
     })
 
 @app.route('/health')
