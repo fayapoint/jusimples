@@ -33,13 +33,22 @@ logger.info(f"OpenAI API Key length: {len(openai_api_key) if openai_api_key else
 client = None
 try:
     if openai_api_key and openai_api_key != 'your_openai_api_key_here' and len(openai_api_key.strip()) > 10:
-        # Initialize client without immediate test (test on first use)
-        client = OpenAI(api_key=openai_api_key.strip())
-        logger.info("OpenAI client initialized successfully")
+        # Initialize client and test it immediately
+        test_client = OpenAI(api_key=openai_api_key.strip())
+        
+        # Test the client with actual model
+        test_response = test_client.chat.completions.create(
+            model=os.getenv('OPENAI_MODEL', 'gpt-5-nano'),
+            messages=[{"role": "user", "content": "Test"}],
+            max_tokens=5
+        )
+        
+        client = test_client
+        logger.info(f"OpenAI client initialized and tested successfully with model: {os.getenv('OPENAI_MODEL', 'gpt-5-nano')}")
     else:
         logger.warning(f"OpenAI API key invalid: key={'exists' if openai_api_key else 'missing'}, length={len(openai_api_key) if openai_api_key else 0}")
 except Exception as e:
-    logger.error(f"Failed to initialize OpenAI client: {type(e).__name__}: {str(e)}")
+    logger.error(f"Failed to initialize/test OpenAI client: {type(e).__name__}: {str(e)}")
     client = None
 
 # Legal knowledge base (simplified approach)
