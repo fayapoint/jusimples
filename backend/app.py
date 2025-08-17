@@ -220,6 +220,9 @@ INSTRUÇÕES:
 - Sempre mencione a fonte legal relevante (artigo, lei, etc.)"""
 
         logger.info(f"Making OpenAI API call with model: {active_model}")
+        logger.info(f"API Key configured: {bool(openai_api_key)}")
+        logger.info(f"Client object exists: {client is not None}")
+        
         response = client.chat.completions.create(
             model=active_model or "gpt-4o-mini",
             messages=[
@@ -232,6 +235,7 @@ INSTRUÇÕES:
         
         ai_response = response.choices[0].message.content.strip()
         logger.info(f"✅ OpenAI API call successful, response length: {len(ai_response)}")
+        logger.info(f"Response preview: {ai_response[:100]}...")
         return ai_response
         
     except Exception as e:
@@ -363,6 +367,53 @@ def search_legal():
     except Exception as e:
         logger.error(f"Error in search_legal: {str(e)}")
         return jsonify({"error": "Erro na busca"}), 500
+
+@app.route('/api/test-rag', methods=['POST'])
+def test_rag():
+    """Test RAG system endpoint for admin dashboard"""
+    global client, active_model
+    
+    try:
+        data = request.get_json()
+        question = data.get('question', '').strip()
+        
+        if not question:
+            return jsonify({"error": "Pergunta não fornecida"}), 400
+        
+        start_time = time.time()
+        
+        # Force OpenAI client initialization for this test
+        if not client and openai_api_key and openai_api_key.strip():
+            try:
+                client = OpenAI(api_key=openai_api_key.strip())
+                active_model = "gpt-4o-mini"
+                logger.info("✅ OpenAI client force-initialized for RAG test")
+            except Exception as e:
+                logger.error(f"❌ Failed to initialize OpenAI for RAG test: {e}")
+        
+        # Search relevant legal knowledge
+        relevant_context = search_legal_knowledge(question)
+        
+        # Generate AI response with forced initialization
+        ai_answer = generate_ai_response(question, relevant_context)
+        
+        processing_time = (time.time() - start_time) * 1000
+        
+        return jsonify({
+            "question": question,
+            "ai_answer": ai_answer,
+            "relevant_context": relevant_context,
+            "processing_time_ms": processing_time,
+            "timestamp": datetime.utcnow().isoformat(),
+            "system_status": {
+                "openai_available": client is not None,
+                "knowledge_base_size": len(relevant_context)
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in test RAG: {e}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/switch-model', methods=['POST'])
 def switch_model():
