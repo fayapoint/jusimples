@@ -5,10 +5,14 @@ from datetime import datetime
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from openai import OpenAI
-from dotenv import load_dotenv
 
-# Load environment variables
-load_dotenv()
+# Load environment variables only if .env file exists
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    # dotenv not available, use environment variables directly
+    pass
 
 from admin_dashboard import admin_bp
 
@@ -105,17 +109,17 @@ client = None
 active_model = None
 
 # Simple initialization without complex error handling
-if openai_api_key and openai_api_key.strip() and openai_api_key != 'your_openai_api_key_here':
-    try:
+try:
+    if openai_api_key and openai_api_key.strip() and openai_api_key != 'your_openai_api_key_here':
         client = OpenAI(api_key=openai_api_key.strip())
         active_model = "gpt-4o-mini"
         logger.info(f"✅ OpenAI client initialized with model: {active_model}")
-    except Exception as e:
-        logger.error(f"❌ OpenAI initialization failed: {e}")
-        client = None
-        active_model = None
-else:
-    logger.warning("❌ No valid OpenAI API key found")
+    else:
+        logger.warning("❌ No valid OpenAI API key found")
+except Exception as e:
+    logger.error(f"❌ OpenAI initialization failed: {e}")
+    client = None
+    active_model = None
 
 # Legal knowledge base (simplified approach)
 LEGAL_KNOWLEDGE = [
@@ -413,8 +417,11 @@ def internal_error(error):
     return jsonify({"error": "Erro interno do servidor"}), 500
 
 if __name__ == '__main__':
-    port = int(os.getenv('PORT', 5000))
-    debug = os.getenv('FLASK_ENV') == 'development'
-    
-    logger.info(f"Starting JuSimples API (Simplified) on port {port}")
-    app.run(host='0.0.0.0', port=port, debug=debug)
+    try:
+        port = int(os.getenv('PORT', 5000))
+        logger.info(f"Starting Flask app on port {port}")
+        logger.info(f"OpenAI client status: {'Available' if client else 'Not available'}")
+        app.run(host='0.0.0.0', port=port, debug=False)
+    except Exception as e:
+        logger.error(f"Failed to start Flask app: {e}")
+        sys.exit(1)
