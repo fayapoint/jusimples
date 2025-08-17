@@ -2,10 +2,14 @@ import os
 import sys
 import logging
 from datetime import datetime
-from typing import List, Dict
-from flask import Flask, request, jsonify, render_template_string
+from flask import Flask, request, jsonify
 from flask_cors import CORS
 from openai import OpenAI
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
 from admin_dashboard import admin_bp
 
 # Configure logging for Railway compatibility
