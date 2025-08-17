@@ -18,22 +18,48 @@ ADMIN_TEMPLATE = """
     <title>JuSimples Admin Dashboard</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; }
-        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
-        .header { background: #2563eb; color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
-        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        .status-good { color: #059669; }
-        .status-bad { color: #dc2626; }
-        .status-warning { color: #d97706; }
-        .btn { background: #2563eb; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: #e2e8f0;
+        }
+        .container { max-width: 1250px; margin: 0 auto; padding: 24px; }
+        .header {
+            background: rgba(37, 99, 235, 0.2);
+            color: #fff;
+            padding: 20px;
+            border-radius: 16px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(255,255,255,0.18);
+            backdrop-filter: blur(8px);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+        }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; }
+        .card {
+            background: rgba(255, 255, 255, 0.08);
+            padding: 20px; border-radius: 16px;
+            border: 1px solid rgba(255,255,255,0.18);
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+        }
+        h3 { color: #fff; margin-bottom: 10px; }
+        .status-good { color: #34d399; }
+        .status-bad { color: #f87171; }
+        .status-warning { color: #fbbf24; }
+        .btn { background: #2563eb; color: white; padding: 10px 16px; border: none; border-radius: 10px; cursor: pointer; }
         .btn:hover { background: #1d4ed8; }
-        .log-entry { padding: 8px; margin: 4px 0; background: #f8f9fa; border-left: 3px solid #2563eb; }
-        .test-form { margin-top: 20px; }
-        .test-form input, .test-form textarea { width: 100%; padding: 10px; margin: 5px 0; border: 1px solid #ddd; border-radius: 4px; }
-        .response-box { background: #f8f9fa; padding: 15px; border-radius: 4px; margin-top: 10px; white-space: pre-wrap; }
-        .env-var { display: flex; justify-content: space-between; align-items: center; padding: 8px; border-bottom: 1px solid #eee; }
-        .knowledge-item { border: 1px solid #ddd; padding: 10px; margin: 5px 0; border-radius: 4px; }
+        .btn.secondary { background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.18); }
+        .log-entry { padding: 8px; margin: 4px 0; background: rgba(255,255,255,0.06); border-left: 3px solid #60a5fa; border-radius: 6px; }
+        .test-form { margin-top: 12px; }
+        .test-form textarea, select, input {
+            width: 100%; padding: 10px; margin: 6px 0;
+            background: rgba(255,255,255,0.06); color: #e2e8f0;
+            border: 1px solid rgba(255,255,255,0.2); border-radius: 10px;
+        }
+        .response-box { background: rgba(255,255,255,0.06); padding: 15px; border-radius: 10px; margin-top: 10px; white-space: pre-wrap; border: 1px solid rgba(255,255,255,0.2); }
+        .env-var { display: flex; justify-content: space-between; align-items: center; padding: 8px; border-bottom: 1px solid rgba(255,255,255,0.12); }
+        .knowledge-item { border: 1px solid rgba(255,255,255,0.12); padding: 10px; margin: 5px 0; border-radius: 10px; background: rgba(255,255,255,0.04); }
+        .small { font-size: 12px; opacity: 0.8; }
     </style>
 </head>
 <body>
@@ -84,6 +110,20 @@ ADMIN_TEMPLATE = """
                 <h3>📈 Estatísticas da API</h3>
                 <div id="api-stats">Carregando...</div>
             </div>
+
+            <!-- Model Controls -->
+            <div class="card">
+                <h3>🤖 Controle de Modelo</h3>
+                <div class="test-form">
+                    <div class="small">Modelo atual: <span id="current-model">-</span></div>
+                    <select id="model-select">
+                        <option value="gpt-5-nano">gpt-5-nano (padrão)</option>
+                        <option value="gpt-4o-mini">gpt-4o-mini</option>
+                        <option value="gpt-mini">gpt-mini</option>
+                    </select>
+                    <button class="btn" onclick="updateModel()">Aplicar</button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -104,6 +144,7 @@ ADMIN_TEMPLATE = """
                 displayKnowledgeBase(knowledge);
                 displayLogs(logs);
                 displayStats(stats);
+                populateModelControls(status.active_model);
             } catch (error) {
                 console.error('Error loading dashboard:', error);
             }
@@ -216,9 +257,56 @@ ADMIN_TEMPLATE = """
                 });
 
                 const result = await response.json();
-                responseDiv.innerHTML = JSON.stringify(result, null, 2);
+                const sourcesHtml = (result.relevant_context || []).map((doc) => `
+                    <div class="knowledge-item">
+                        <strong>${doc.title}</strong><br>
+                        <small>Categoria: ${doc.category} | Palavras-chave: ${(doc.keywords||[]).join(', ')}</small>
+                        <div class="small">Trecho: ${doc.content?.slice(0,160) || ''}...</div>
+                    </div>
+                `).join('');
+
+                responseDiv.innerHTML = `
+                    <div><strong>Resposta da IA:</strong></div>
+                    <div style="margin-top:6px;">${result.ai_answer || 'Sem resposta'}</div>
+                    <div class="small" style="margin-top:10px;">Tempo: ${Math.round(result.processing_time_ms||0)}ms</div>
+                    <hr style="margin:10px 0; border-color: rgba(255,255,255,0.1);">
+                    <div><strong>Fontes:</strong></div>
+                    ${sourcesHtml || '<div class="small">Sem fontes</div>'}
+                `;
             } catch (error) {
                 responseDiv.innerHTML = `Erro: ${error.message}`;
+            }
+        }
+
+        function populateModelControls(activeModel) {
+            const select = document.getElementById('model-select');
+            const current = document.getElementById('current-model');
+            if (activeModel) {
+                current.textContent = activeModel;
+                for (const opt of select.options) {
+                    if (opt.value === activeModel) opt.selected = true;
+                }
+            }
+        }
+
+        async function updateModel() {
+            const model = document.getElementById('model-select').value;
+            try {
+                const res = await fetch('/api/switch-model', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ model })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    document.getElementById('current-model').textContent = data.active_model;
+                    alert(`Modelo atualizado para: ${data.active_model}`);
+                    loadDashboard();
+                } else {
+                    alert('Falha ao atualizar modelo: ' + (data.message || ''));
+                }
+            } catch (e) {
+                alert('Erro ao atualizar modelo: ' + e.message);
             }
         }
 
@@ -249,26 +337,36 @@ def api_status():
     """API endpoint for system status"""
     from app import client, LEGAL_KNOWLEDGE, active_model
     
-    # Test OpenAI client availability
+    # Test OpenAI client availability (non-fatal)
     openai_available = False
     if client:
         try:
-            # Quick test call
-            test_response = client.chat.completions.create(
+            _ = client.chat.completions.create(
                 model=active_model or "gpt-4o-mini",
-                messages=[{"role": "user", "content": "Test"}],
+                messages=[{"role": "user", "content": "ping"}],
                 max_tokens=1
             )
             openai_available = True
-        except:
+        except Exception:
             openai_available = False
-    
+
+    now_iso = datetime.utcnow().isoformat()
+    knowledge_count = len(LEGAL_KNOWLEDGE)
+    system_healthy = openai_available and knowledge_count >= 0
+
+    # Return both the new structure (used by JS) and legacy fields (for compatibility)
     return jsonify({
-        "system": "Operacional" if openai_available else "Com problemas",
-        "openai_client": "Disponível" if openai_available else "Não disponível",
+        # New fields expected by JS
+        "system_healthy": system_healthy,
+        "openai_available": openai_available,
+        "knowledge_count": knowledge_count,
+        "timestamp": now_iso,
         "active_model": active_model or "Não configurado",
-        "knowledge_base": f"{len(LEGAL_KNOWLEDGE)} documentos",
-        "last_update": datetime.utcnow().isoformat()
+        # Legacy fields kept for compatibility
+        "system": "Operacional" if system_healthy else "Com problemas",
+        "openai_client": "Disponível" if openai_available else "Não disponível",
+        "knowledge_base": f"{knowledge_count} documentos",
+        "last_update": now_iso
     })
 
 @admin_bp.route('/api/env-vars')
