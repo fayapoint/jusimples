@@ -4,11 +4,14 @@ FROM python:3.11-slim
 # Set working directory
 WORKDIR /app
 
-# Copy the entire project first
-COPY . .
+# Copy requirements file first for better caching
+COPY backend/requirements.txt ./requirements.txt
 
-# Install dependencies from backend directory
-RUN pip install --no-cache-dir -r backend/requirements.txt
+# Install dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy the entire project
+COPY . .
 
 # Set working directory to backend
 WORKDIR /app/backend
