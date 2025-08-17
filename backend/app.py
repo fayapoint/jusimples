@@ -30,34 +30,59 @@ openai_api_key = os.getenv('OPENAI_API_KEY')
 logger.info(f"OpenAI API Key status: {'SET' if openai_api_key and openai_api_key != 'your_openai_api_key_here' else 'NOT SET'}")
 logger.info(f"OpenAI API Key length: {len(openai_api_key) if openai_api_key else 0}")
 
+# Global variables for OpenAI client and model
 client = None
-try:
-    if openai_api_key and openai_api_key != 'your_openai_api_key_here' and len(openai_api_key.strip()) > 10:
-        # Initialize client and test it immediately
-        test_client = OpenAI(api_key=openai_api_key.strip())
-        
-        # Test the client with fallback model first
-        try:
-            test_response = test_client.chat.completions.create(
-                model=os.getenv('OPENAI_MODEL', 'gpt-4o-mini'),
-                messages=[{"role": "user", "content": "Test"}],
-                max_tokens=5
-            )
-        except Exception as model_error:
-            logger.warning(f"Model {os.getenv('OPENAI_MODEL', 'gpt-5-nano')} failed, trying gpt-4o-mini: {str(model_error)}")
-            test_response = test_client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[{"role": "user", "content": "Test"}],
-                max_tokens=5
-            )
-        
-        client = test_client
-        logger.info(f"OpenAI client initialized and tested successfully with model: {os.getenv('OPENAI_MODEL', 'gpt-5-nano')}")
-    else:
+active_model = None
+
+def initialize_openai_client():
+    """Initialize and test OpenAI client with model fallback"""
+    global client, active_model
+    
+    if not openai_api_key or openai_api_key == 'your_openai_api_key_here' or len(openai_api_key.strip()) <= 10:
         logger.warning(f"OpenAI API key invalid: key={'exists' if openai_api_key else 'missing'}, length={len(openai_api_key) if openai_api_key else 0}")
-except Exception as e:
-    logger.error(f"Failed to initialize/test OpenAI client: {type(e).__name__}: {str(e)}")
-    client = None
+        return False
+    
+    try:
+        test_client = OpenAI(api_key=openai_api_key.strip())
+        preferred_model = os.getenv('OPENAI_MODEL', 'gpt-5-nano')
+        
+        # Try preferred model first
+        try:
+            logger.info(f"Testing preferred model: {preferred_model}")
+            test_response = test_client.chat.completions.create(
+                model=preferred_model,
+                messages=[{"role": "user", "content": "Test"}],
+                max_tokens=5
+            )
+            client = test_client
+            active_model = preferred_model
+            logger.info(f"✅ OpenAI client initialized successfully with preferred model: {preferred_model}")
+            return True
+            
+        except Exception as model_error:
+            logger.warning(f"❌ Preferred model {preferred_model} failed: {str(model_error)}")
+            
+            # Fallback to gpt-4o-mini
+            fallback_model = "gpt-4o-mini"
+            logger.info(f"🔄 Trying fallback model: {fallback_model}")
+            test_response = test_client.chat.completions.create(
+                model=fallback_model,
+                messages=[{"role": "user", "content": "Test"}],
+                max_tokens=5
+            )
+            client = test_client
+            active_model = fallback_model
+            logger.info(f"✅ OpenAI client initialized with fallback model: {fallback_model}")
+            return True
+            
+    except Exception as e:
+        logger.error(f"❌ Failed to initialize OpenAI client: {type(e).__name__}: {str(e)}")
+        client = None
+        active_model = None
+        return False
+
+# Initialize client on startup
+initialize_openai_client()
 
 # Legal knowledge base (simplified approach)
 LEGAL_KNOWLEDGE = [
@@ -121,13 +146,12 @@ def generate_ai_response(question: str, context: List[Dict]) -> str:
         return "Sistema de IA não disponível no momento. Serviço está sendo configurado."
     
     try:
-        # Build context from legal knowledge
         context_text = ""
         if context:
             context_text = "Contexto legal relevante:\n"
             for item in context:
                 context_text += f"- {item['title']}: {item['content']}\n"
-        
+
         prompt = f"""Você é um assistente jurídico especializado em direito brasileiro. 
         Responda a pergunta de forma clara, precisa e acessível para pessoas sem conhecimento jurídico avançado.
 
@@ -143,9 +167,12 @@ def generate_ai_response(question: str, context: List[Dict]) -> str:
 
         Mantenha a resposta concisa mas completa."""
 
-        model = os.getenv('OPENAI_MODEL', 'gpt-5-nano')
+        # Use the active model that was successfully tested
+        model_to_use = active_model or os.getenv('OPENAI_MODEL', 'gpt-4o-mini')
+        logger.info(f"Generating response with model: {model_to_use}")
+        
         response = client.chat.completions.create(
-            model=model,
+            model=model_to_use,
             messages=[{"role": "user", "content": prompt}],
             max_tokens=500,
             temperature=0.3
@@ -228,6 +255,7 @@ def ask_question():
             "disclaimer": "Esta resposta é baseada em IA e tem caráter informativo. Para casos complexos, consulte um advogado especializado.",
             "debug_info": {
                 "openai_available": client is not None,
+                "active_model": active_model,
                 "context_found": len(relevant_context),
                 "api_key_configured": openai_api_key is not None and openai_api_key != 'your_openai_api_key_here'
             }
@@ -278,14 +306,49 @@ def search_legal():
         logger.error(f"Error in search_legal: {str(e)}")
         return jsonify({"error": "Erro na busca"}), 500
 
+@app.route('/api/switch-model', methods=['POST'])
+def switch_model():
+    """Switch OpenAI model and reinitialize client"""
+    try:
+        data = request.get_json()
+        new_model = data.get('model', 'gpt-4o-mini')
+        
+        # Update environment variable temporarily
+        os.environ['OPENAI_MODEL'] = new_model
+        
+        # Reinitialize client
+        success = initialize_openai_client()
+        
+        if success:
+            return jsonify({
+                "success": True,
+                "message": f"Switched to model: {active_model}",
+                "active_model": active_model
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "message": "Failed to initialize with new model",
+                "active_model": active_model
+            }), 500
+            
+    except Exception as e:
+        logger.error(f"Error switching model: {str(e)}")
+        return jsonify({
+            "success": False,
+            "message": f"Error: {str(e)}"
+        }), 500
+
 @app.route('/api/debug')
-def debug_system():
+def debug_info():
     """Debug endpoint to check system status"""
     return jsonify({
-        "openai_api_key_set": openai_api_key is not None and openai_api_key != 'your_openai_api_key_here',
         "openai_client_available": client is not None,
-        "cors_origins": os.getenv('CORS_ORIGINS', 'not_set'),
-        "flask_env": os.getenv('FLASK_ENV', 'not_set'),
+        "active_model": active_model,
+        "api_key_configured": openai_api_key is not None and openai_api_key != 'your_openai_api_key_here',
+        "api_key_length": len(openai_api_key) if openai_api_key else 0,
+        "model_configured": os.getenv('OPENAI_MODEL', 'Not set'),
+        "cors_origins": allowed_origins,
         "knowledge_base_size": len(LEGAL_KNOWLEDGE),
         "timestamp": datetime.utcnow().isoformat()
     })

@@ -245,25 +245,17 @@ def dashboard():
     return render_template_string(ADMIN_TEMPLATE)
 
 @admin_bp.route('/api/status')
-def get_system_status():
-    """Get system status"""
-    try:
-        from app import client, LEGAL_KNOWLEDGE
-        
-        return jsonify({
-            "system_healthy": True,
-            "openai_available": client is not None,
-            "knowledge_count": len(LEGAL_KNOWLEDGE),
-            "timestamp": datetime.utcnow().isoformat(),
-            "environment": os.getenv('FLASK_ENV', 'unknown'),
-            "python_version": os.sys.version.split()[0]
-        })
-    except Exception as e:
-        return jsonify({
-            "system_healthy": False,
-            "error": str(e),
-            "timestamp": datetime.utcnow().isoformat()
-        })
+def api_status():
+    """API endpoint for system status"""
+    from app import client, LEGAL_KNOWLEDGE, active_model
+    
+    return jsonify({
+        "system": "Operacional",
+        "openai_client": "Disponível" if client else "Não disponível",
+        "active_model": active_model or "Não configurado",
+        "knowledge_base": f"{len(LEGAL_KNOWLEDGE)} documentos",
+        "last_update": datetime.utcnow().isoformat()
+    })
 
 @admin_bp.route('/api/env-vars')
 def get_env_vars():
