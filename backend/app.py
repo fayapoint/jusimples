@@ -28,16 +28,18 @@ CORS(app, origins=allowed_origins)
 # OpenAI configuration
 openai_api_key = os.getenv('OPENAI_API_KEY')
 logger.info(f"OpenAI API Key status: {'SET' if openai_api_key and openai_api_key != 'your_openai_api_key_here' else 'NOT SET'}")
+logger.info(f"OpenAI API Key length: {len(openai_api_key) if openai_api_key else 0}")
 
+client = None
 try:
-    if openai_api_key and openai_api_key != 'your_openai_api_key_here':
-        client = OpenAI(api_key=openai_api_key)
+    if openai_api_key and openai_api_key != 'your_openai_api_key_here' and len(openai_api_key.strip()) > 10:
+        # Initialize client without immediate test (test on first use)
+        client = OpenAI(api_key=openai_api_key.strip())
         logger.info("OpenAI client initialized successfully")
     else:
-        client = None
-        logger.warning("OpenAI API key not configured properly")
+        logger.warning(f"OpenAI API key invalid: key={'exists' if openai_api_key else 'missing'}, length={len(openai_api_key) if openai_api_key else 0}")
 except Exception as e:
-    logger.error(f"Failed to initialize OpenAI client: {e}")
+    logger.error(f"Failed to initialize OpenAI client: {type(e).__name__}: {str(e)}")
     client = None
 
 # Legal knowledge base (simplified approach)
