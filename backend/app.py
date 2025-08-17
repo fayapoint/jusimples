@@ -1,20 +1,25 @@
 import os
+import sys
 import logging
 from datetime import datetime
-from typing import Dict, List
-
-from flask import Flask, jsonify, request
+from typing import List, Dict
+from flask import Flask, request, jsonify, render_template_string
 from flask_cors import CORS
-from dotenv import load_dotenv
 from openai import OpenAI
 from admin_dashboard import admin_bp
 
-# Load environment variables
-load_dotenv()
-
-# Configure logging
-logging.basicConfig(level=logging.INFO)
+# Configure logging for Railway compatibility
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[logging.StreamHandler(sys.stdout)]
+)
 logger = logging.getLogger(__name__)
+
+# Log startup info
+logger.info("Initializing JuSimples backend...")
+logger.info(f"Python version: {sys.version}")
+logger.info(f"Working directory: {os.getcwd()}")
 
 app = Flask(__name__)
 
