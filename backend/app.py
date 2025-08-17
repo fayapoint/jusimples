@@ -181,20 +181,28 @@ def generate_ai_response(question, relevant_context):
     """Generate AI response using OpenAI with relevant legal context"""
     global client, active_model
     
-    # Force client initialization if not available
-    if not client:
-        logger.info("OpenAI client not available, forcing initialization...")
-        if openai_api_key and openai_api_key.strip() and openai_api_key != 'your_openai_api_key_here':
-            try:
-                client = OpenAI(api_key=openai_api_key.strip())
-                active_model = "gpt-4o-mini"
-                logger.info("✅ OpenAI client force-initialized successfully")
-            except Exception as init_error:
-                logger.error(f"❌ Failed to force-initialize OpenAI client: {init_error}")
-                return "Sistema de IA não disponível no momento. Serviço está sendo configurado."
-        else:
-            logger.error("❌ No valid API key for OpenAI initialization")
-            return "Sistema de IA não disponível no momento. Serviço está sendo configurado."
+    # ALWAYS force client initialization for every request
+    logger.info("FORCING OpenAI client initialization for every request...")
+    if openai_api_key and openai_api_key.strip() and openai_api_key != 'your_openai_api_key_here':
+        try:
+            client = OpenAI(api_key=openai_api_key.strip())
+            active_model = "gpt-4o-mini"
+            logger.info("✅ OpenAI client force-initialized successfully")
+            
+            # Test the client immediately
+            test_response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": "Test"}],
+                max_tokens=1
+            )
+            logger.info("✅ OpenAI client test call successful")
+            
+        except Exception as init_error:
+            logger.error(f"❌ Failed to force-initialize OpenAI client: {init_error}")
+            return f"Erro na inicialização do OpenAI: {str(init_error)}"
+    else:
+        logger.error("❌ No valid API key for OpenAI initialization")
+        return "API key do OpenAI não configurada corretamente."
     
     try:
         # Prepare context for the AI
