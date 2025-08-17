@@ -187,7 +187,7 @@ def generate_ai_response(question, relevant_context):
     if not openai_api_key or openai_api_key.strip() == 'your_openai_api_key_here' or len(openai_api_key.strip()) < 20:
         error_msg = f"❌ Invalid OpenAI API key: length={len(openai_api_key) if openai_api_key else 0}"
         logger.error(error_msg)
-        return f"Erro: {error_msg}"
+        return f"ERRO API KEY: {error_msg}"
     
     # Create a fresh OpenAI client for this request
     try:
@@ -395,7 +395,9 @@ def test_rag():
         relevant_context = search_legal_knowledge(question)
         
         # Generate AI response with forced initialization
+        logger.info(f"🔍 About to call generate_ai_response for: {question}")
         ai_answer = generate_ai_response(question, relevant_context)
+        logger.info(f"🎯 Received AI answer: {ai_answer[:100]}...")
         
         processing_time = (time.time() - start_time) * 1000
         
