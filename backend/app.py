@@ -126,7 +126,7 @@ def generate_ai_response(question: str, context: List[Dict]) -> str:
 
         Mantenha a resposta concisa mas completa."""
 
-        model = os.getenv('OPENAI_MODEL', 'gpt-4o-mini')
+        model = os.getenv('OPENAI_MODEL', 'gpt-5-nano')
         response = client.chat.completions.create(
             model=model,
             messages=[{"role": "user", "content": prompt}],

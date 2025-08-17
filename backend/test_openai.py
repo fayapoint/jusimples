@@ -29,7 +29,7 @@ def test_openai_connection():
         
         # Test with a simple completion
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="gpt-5-nano",
             messages=[{"role": "user", "content": "Say 'Hello from JuSimples!'"}],
             max_tokens=50
         )
