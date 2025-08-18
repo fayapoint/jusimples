@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useTheme } from '../context/ThemeContext';
 import { Github, Instagram, Linkedin } from 'lucide-react';
 
@@ -7,29 +7,41 @@ export default function Footer() {
   const { theme } = useTheme();
   const expandTimerRef = useRef(null);
   const collapseTimerRef = useRef(null);
+  const closingClassTimerRef = useRef(null);
   const footerRef = useRef(null);
   
-  const clearExpandTimer = () => {
+  const clearExpandTimer = useCallback(() => {
     if (expandTimerRef.current) {
       clearTimeout(expandTimerRef.current);
       expandTimerRef.current = null;
     }
-  };
+  }, []);
 
-  const clearCollapseTimer = () => {
+  const clearCollapseTimer = useCallback(() => {
     if (collapseTimerRef.current) {
       clearTimeout(collapseTimerRef.current);
       collapseTimerRef.current = null;
     }
-  };
+  }, []);
 
-  const scheduleCollapse = (delay = 1200) => {
+  const scheduleCollapse = useCallback((delay = 1200) => {
     clearCollapseTimer();
+    const root = document.documentElement;
+    // Mark closing for CSS to apply a slightly longer, softer transition
+    root.classList.add('footer-closing');
+    if (closingClassTimerRef.current) {
+      clearTimeout(closingClassTimerRef.current);
+    }
+    closingClassTimerRef.current = setTimeout(() => {
+      root.classList.remove('footer-closing');
+      closingClassTimerRef.current = null;
+    }, delay + 800); // remove after collapse begins and animation completes
+
     collapseTimerRef.current = setTimeout(() => {
       setExpanded(false);
       clearCollapseTimer();
     }, delay);
-  };
+  }, [clearCollapseTimer]);
 
   const handleMouseEnter = () => {
     // Cancel any pending collapse and schedule expand
@@ -57,6 +69,8 @@ export default function Footer() {
     const root = document.documentElement;
     if (expanded) {
       root.classList.add('footer-expanded');
+      // If expanding again, ensure 'closing' flag is cleared
+      root.classList.remove('footer-closing');
     } else {
       root.classList.remove('footer-expanded');
     }
@@ -65,9 +79,14 @@ export default function Footer() {
       // Clean up timer and ensure class removed on unmount
       clearExpandTimer();
       clearCollapseTimer();
+      if (closingClassTimerRef.current) {
+        clearTimeout(closingClassTimerRef.current);
+        closingClassTimerRef.current = null;
+      }
       root.classList.remove('footer-expanded');
+      root.classList.remove('footer-closing');
     };
-  }, [expanded]);
+  }, [expanded, clearExpandTimer, clearCollapseTimer]);
 
   // Ensure moving into the Background Selector keeps the footer expanded
   useEffect(() => {
@@ -95,7 +114,7 @@ export default function Footer() {
       selector.removeEventListener('mouseleave', onLeave);
       selector.removeEventListener('mousedown', onMouseDown);
     };
-  }, [scheduleCollapse]);
+  }, [scheduleCollapse, clearCollapseTimer]);
   
   return (
     <footer 
