@@ -546,6 +546,22 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
 }
 
+/* Footer brand and layout enhancements */
+.brand-section { grid-column: span 2; }
+.footer-logo { height: 40px; margin-bottom: 10px; display: block; }
+.footer-description { color: var(--text-secondary); margin: 8px 0 6px; line-height: 1.6; }
+.footer-small-text { color: var(--text-muted); font-size: 0.85rem; line-height: 1.5; }
+.footer-section .link-list { margin-top: 6px; }
+.footer-section .link-list li { list-style: none; }
+.footer-section .link-list a { color: var(--text-secondary); text-decoration: none; }
+.footer-section .link-list a:hover { color: var(--text-primary); }
+.footer-bottom .footer-links { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+
+@media (max-width: 900px) {
+  .brand-section { grid-column: span 1; }
+  .footer-logo { height: 36px; }
+}
+
 .footer-container.compact {
   padding: 0 1.5rem;
 }
