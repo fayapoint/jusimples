@@ -1,8 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
-const LOCAL_FALLBACK = 'http://localhost:5000';
+// Get API URL from environment or use production URL as fallback
+const API_URL = process.env.REACT_APP_API_URL || 'https://jusimples-production.up.railway.app';
+const LOCAL_FALLBACK = 'https://jusimples-production.up.railway.app';
+
+// For debugging
+console.log('Environment API URL:', process.env.REACT_APP_API_URL);
+console.log('Using API URL:', API_URL);
 
 export default function Footer() {
   const { user } = useAuth();
@@ -17,26 +22,53 @@ export default function Footer() {
     let cancelled = false;
 
     async function fetchWithFallback(path) {
-      // Prefer relative path (works with CRA proxy), then env API, then localhost
-      const urls = ['', API_URL, LOCAL_FALLBACK];
+      // In production, prioritize the actual API URL over relative paths
+      const isProduction = process.env.REACT_APP_ENVIRONMENT === 'production';
+      
+      // For production: try API_URL first, then relative path as fallback
+      // For development: try relative path first (for local proxy), then API_URL
+      const urls = isProduction 
+        ? [API_URL, '', LOCAL_FALLBACK]
+        : ['', API_URL, LOCAL_FALLBACK];
+      
+      console.log('Environment:', process.env.REACT_APP_ENVIRONMENT);
+      console.log('URL order:', urls);
+      
       let lastErr = null;
       for (const base of urls) {
         try {
           const controller = new AbortController();
           const t = setTimeout(() => controller.abort(), 7000);
           const url = base ? `${base}${path}` : path; // '' uses relative path
-          const res = await fetch(url, { signal: controller.signal });
+          
+          console.log('Attempting fetch from:', url);
+          const res = await fetch(url, { 
+            signal: controller.signal,
+            // Add credentials for cookies if needed
+            credentials: 'include',
+            // Ensure proper headers
+            headers: {
+              'Accept': 'application/json'
+            }
+          });
+          
           clearTimeout(t);
           if (!res.ok) {
+            console.warn(`Failed fetch from ${url}: HTTP ${res.status}`);
             lastErr = new Error(`HTTP ${res.status}`);
             continue;
           }
+          
+          console.log('Successful fetch from:', url);
           return await res.json();
         } catch (e) {
+          console.error(`Error fetching from ${base}${path}:`, e.message);
           lastErr = e;
           continue;
         }
       }
+      
+      console.error('All fetch attempts failed');
       throw lastErr || new Error('Falha ao buscar dados');
     }
 

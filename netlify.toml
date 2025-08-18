@@ -12,11 +12,10 @@
   to = "/index.html"
   status = 200
 
-# API proxy to backend (for development)
-# Note: In production, you'll need to deploy backend separately
+# API proxy to backend (production)
 [[redirects]]
   from = "/api/*"
-  to = "http://localhost:5000/api/:splat"
+  to = "https://jusimples-production.up.railway.app/api/:splat"
   status = 200
   force = true
 
