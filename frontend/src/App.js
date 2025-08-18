@@ -49,6 +49,22 @@ function App() {
         color: var(--text-primary);
         transition: background-color 0.3s ease, color 0.3s ease;
       }
+
+      /* Theme-specific background gradients */
+      :root[data-theme="normal"] .bg-gradient {
+        background: radial-gradient(ellipse at top, rgba(99, 102, 241, 0.1) 0%, transparent 50%),
+                    radial-gradient(ellipse at bottom right, rgba(139, 92, 246, 0.1) 0%, transparent 50%);
+      }
+      
+      :root[data-theme="light"] .bg-gradient {
+        background: radial-gradient(ellipse at top, rgba(59, 130, 246, 0.05) 0%, transparent 50%),
+                    radial-gradient(ellipse at bottom right, rgba(79, 70, 229, 0.05) 0%, transparent 50%);
+      }
+      
+      :root[data-theme="dark"] .bg-gradient {
+        background: radial-gradient(ellipse at top, rgba(99, 102, 241, 0.08) 0%, transparent 50%),
+                    radial-gradient(ellipse at bottom right, rgba(139, 92, 246, 0.08) 0%, transparent 50%);
+      }
     `;
     document.head.appendChild(style);
     

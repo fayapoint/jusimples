@@ -1,10 +1,12 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Scale, LogIn, UserPlus, Search } from 'lucide-react';
+import { Scale, LogIn, UserPlus, Search, Sun, Moon, Monitor } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 
 export default function Header() {
   const { user, logout } = useAuth();
+  const { theme, changeTheme } = useTheme();
   const navigate = useNavigate();
 
   const handleLogout = () => {
@@ -20,6 +22,29 @@ export default function Header() {
           JuSimples
         </Link>
         <div className="nav-buttons">
+          <div className="theme-buttons">
+            <button
+              className={`theme-btn ${theme === 'normal' ? 'active' : ''}`}
+              onClick={() => changeTheme('normal')}
+              title="Tema Normal"
+            >
+              <Monitor size={16} />
+            </button>
+            <button
+              className={`theme-btn ${theme === 'light' ? 'active' : ''}`}
+              onClick={() => changeTheme('light')}
+              title="Tema Claro"
+            >
+              <Sun size={16} />
+            </button>
+            <button
+              className={`theme-btn ${theme === 'dark' ? 'active' : ''}`}
+              onClick={() => changeTheme('dark')}
+              title="Tema Escuro"
+            >
+              <Moon size={16} />
+            </button>
+          </div>
           <button
             className="btn btn-outline"
             onClick={() => window.dispatchEvent(new Event('open-command-palette'))}
