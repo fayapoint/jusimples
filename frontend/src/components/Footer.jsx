@@ -1,13 +1,4 @@
-import React, { useEffect, useState } from 'react';
-import { useAuth } from '../context/AuthContext';
-
-// Get API URL from environment or use production URL as fallback
-const API_URL = process.env.REACT_APP_API_URL || 'https://jusimples-production.up.railway.app';
-const LOCAL_FALLBACK = 'https://jusimples-production.up.railway.app';
-
-// For debugging
-console.log('Environment API URL:', process.env.REACT_APP_API_URL);
-console.log('Using API URL:', API_URL);
+import React from 'react';
 
 export default function Footer() {
   return (
