@@ -1,37 +1,106 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useTheme } from '../context/ThemeContext';
+import { Github, Instagram, Linkedin } from 'lucide-react';
 
 export default function Footer() {
   const [expanded, setExpanded] = useState(false);
   const { theme } = useTheme();
-  const timerRef = useRef(null);
+  const expandTimerRef = useRef(null);
+  const collapseTimerRef = useRef(null);
+  const footerRef = useRef(null);
   
-  const handleMouseEnter = () => {
-    timerRef.current = setTimeout(() => {
-      setExpanded(true);
-    }, 1000);
-  };
-  
-  const handleMouseLeave = () => {
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
+  const clearExpandTimer = () => {
+    if (expandTimerRef.current) {
+      clearTimeout(expandTimerRef.current);
+      expandTimerRef.current = null;
     }
-    setExpanded(false);
+  };
+
+  const clearCollapseTimer = () => {
+    if (collapseTimerRef.current) {
+      clearTimeout(collapseTimerRef.current);
+      collapseTimerRef.current = null;
+    }
+  };
+
+  const scheduleCollapse = (delay = 1200) => {
+    clearCollapseTimer();
+    collapseTimerRef.current = setTimeout(() => {
+      setExpanded(false);
+      clearCollapseTimer();
+    }, delay);
+  };
+
+  const handleMouseEnter = () => {
+    // Cancel any pending collapse and schedule expand
+    clearCollapseTimer();
+    clearExpandTimer();
+    expandTimerRef.current = setTimeout(() => {
+      setExpanded(true);
+      clearExpandTimer();
+    }, 600);
   };
   
-  // Clean up timer on unmount
+  const handleMouseLeave = (e) => {
+    // If moving into the background selector, keep expanded
+    const toEl = e?.relatedTarget;
+    if (toEl && (toEl.closest && toEl.closest('.background-selector'))) {
+      return; // don't collapse
+    }
+    clearExpandTimer();
+    // Delay the collapse for a more organic feel
+    scheduleCollapse(1200);
+  };
+  
+  // Sync a root-level class so CSS can animate things (e.g., BackgroundSelector) on expand/collapse
   useEffect(() => {
+    const root = document.documentElement;
+    if (expanded) {
+      root.classList.add('footer-expanded');
+    } else {
+      root.classList.remove('footer-expanded');
+    }
+
     return () => {
-      if (timerRef.current) {
-        clearTimeout(timerRef.current);
+      // Clean up timer and ensure class removed on unmount
+      clearExpandTimer();
+      clearCollapseTimer();
+      root.classList.remove('footer-expanded');
+    };
+  }, [expanded]);
+
+  // Ensure moving into the Background Selector keeps the footer expanded
+  useEffect(() => {
+    const selector = document.querySelector('.background-selector');
+    if (!selector) return;
+
+    const onEnter = () => { clearCollapseTimer(); setExpanded(true); };
+    const onMouseDown = () => { clearCollapseTimer(); setExpanded(true); };
+    const onLeave = (e) => {
+      const toEl = e?.relatedTarget;
+      const footerEl = footerRef.current;
+      if (toEl && footerEl && (toEl === footerEl || (toEl.closest && toEl.closest('footer')))) {
+        return; // moving back into footer
       }
+      // Schedule a delayed collapse when leaving selector to outside
+      scheduleCollapse(1200);
+    };
+
+    selector.addEventListener('mouseenter', onEnter);
+    selector.addEventListener('mouseleave', onLeave);
+    selector.addEventListener('mousedown', onMouseDown);
+
+    return () => {
+      selector.removeEventListener('mouseenter', onEnter);
+      selector.removeEventListener('mouseleave', onLeave);
+      selector.removeEventListener('mousedown', onMouseDown);
     };
   }, []);
   
   return (
     <footer 
       className={`footer footer-${theme} ${expanded ? 'expanded-footer' : 'compact-footer'}`}
+      ref={footerRef}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
@@ -42,13 +111,6 @@ export default function Footer() {
               {/* Brand & About */}
               <div className="footer-section brand-section">
                 <img src="/logotipojusimples.png" alt="Logo JuSimples" className="footer-logo" />
-                <p className="footer-description">
-                  O JuSimples é uma plataforma online que simplifica demandas jurídicas de menor complexidade por meio de IA e automação,
-                  tornando o acesso à justiça mais rápido e acessível para todos.
-                </p>
-                <p className="footer-small-text">
-                  As informações fornecidas pela plataforma são de caráter informativo. Em casos complexos, consulte um advogado especializado.
-                </p>
               </div>
 
               {/* Useful Links */}
@@ -74,18 +136,35 @@ export default function Footer() {
                 </ul>
               </div>
 
-              {/* Socials */}
-              <div className="footer-section social-section">
-                <h4>Redes Sociais</h4>
+              {/* Socials separate right column */}
+              <div className="footer-section socials-section">
                 <div className="socials">
-                  <a href="https://linkedin.com/company/jusimples" target="_blank" rel="noopener noreferrer" className="social-link linkedin">
-                    <span className="social-icon">🔗</span>
+                  <a
+                    href="https://linkedin.com/company/jusimples"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="social-link linkedin"
+                    aria-label="LinkedIn JuSimples"
+                  >
+                    <Linkedin size={18} />
                   </a>
-                  <a href="https://instagram.com/jusimples" target="_blank" rel="noopener noreferrer" className="social-link instagram">
-                    <span className="social-icon">📸</span>
+                  <a
+                    href="https://instagram.com/jusimples"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="social-link instagram"
+                    aria-label="Instagram JuSimples"
+                  >
+                    <Instagram size={18} />
                   </a>
-                  <a href="https://github.com/jusimples" target="_blank" rel="noopener noreferrer" className="social-link github">
-                    <span className="social-icon">💻</span>
+                  <a
+                    href="https://github.com/jusimples"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="social-link github"
+                    aria-label="GitHub JuSimples"
+                  >
+                    <Github size={18} />
                   </a>
                 </div>
               </div>
