@@ -227,7 +227,7 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* Main Content */
 .main-content {
-  padding-top: 5rem;
+  padding-top: 4rem;
   /* Avoid forcing extra height so the first fold has no scroll */
   min-height: auto;
   /* Take remaining height so footer sits at bottom */
@@ -417,6 +417,69 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .typing-dot:nth-child(3) {
   animation-delay: 0.4s;
+}
+
+/* Search Trends */
+.search-trends {
+  max-width: 900px;
+  margin: 2rem auto 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.trend-panel {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.trend-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.trend-title {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 0.95rem;
+}
+
+.trend-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.trend-chip {
+  border: 1px solid var(--border);
+  background: var(--surface-light);
+  color: var(--text-secondary);
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.trend-chip:hover {
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
+.trend-empty {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+@media (max-width: 768px) {
+  .search-trends {
+    grid-template-columns: 1fr;
+    margin: 1.5rem 1rem 0;
+  }
 }
 
 /* Footer */

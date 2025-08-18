@@ -16,11 +16,42 @@ export default function Home() {
   const mainTitleRef = useRef(null);
   const mainTitleInterval = useRef(null);
   const phraseInterval = useRef(null);
+  const [recentSearches, setRecentSearches] = useState([]);
+  const [topSearches, setTopSearches] = useState([]);
+  const inputRef = useRef(null);
+
+  // Search history helpers
+  const updateSearchHistory = (term) => {
+    const t = (term || '').trim();
+    if (!t) return;
+    // Recent searches (unique, most recent first, max 10)
+    const existingRecent = JSON.parse(localStorage.getItem('recentSearches') || '[]');
+    const newRecent = [t, ...existingRecent.filter((s) => s !== t)].slice(0, 10);
+    localStorage.setItem('recentSearches', JSON.stringify(newRecent));
+    setRecentSearches(newRecent);
+
+    // Counts for top searches
+    const counts = JSON.parse(localStorage.getItem('searchCounts') || '{}');
+    counts[t] = (counts[t] || 0) + 1;
+    localStorage.setItem('searchCounts', JSON.stringify(counts));
+
+    const sortedTop = Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([term, count]) => ({ term, count }));
+    setTopSearches(sortedTop);
+  };
+
+  const handleChipClick = (term) => {
+    setQuestion(term);
+    if (inputRef.current) inputRef.current.focus();
+  };
 
   const handleAskQuestion = async () => {
     if (!question.trim()) return;
     setLoading(true);
     try {
+      updateSearchHistory(question);
       const response = await fetch(`${API_URL}/api/ask`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -87,6 +118,22 @@ export default function Home() {
     return () => clearInterval(phraseInterval.current);
   }, []);
 
+  // Load search history on mount
+  useEffect(() => {
+    try {
+      const recent = JSON.parse(localStorage.getItem('recentSearches') || '[]');
+      setRecentSearches(recent);
+      const counts = JSON.parse(localStorage.getItem('searchCounts') || '{}');
+      const sortedTop = Object.entries(counts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 10)
+        .map(([term, count]) => ({ term, count }));
+      setTopSearches(sortedTop);
+    } catch (err) {
+      // ignore malformed localStorage
+    }
+  }, []);
+
   // Setup main title animation interval
   useEffect(() => {
     mainTitleInterval.current = setInterval(() => {
@@ -148,6 +195,7 @@ export default function Home() {
                 onKeyPress={handleKeyPress}
                 placeholder="Descreva sua questão jurídica..."
                 className="chat-input"
+                ref={inputRef}
                 rows="1"
               />
               <button onClick={handleAskQuestion} disabled={loading || !question.trim()} className="chat-send-btn">
@@ -172,6 +220,43 @@ export default function Home() {
                 <p>{answer}</p>
               </div>
             )}
+          </div>
+        </div>
+
+        {/* Search Trends Section */}
+        <div className="search-trends">
+          <div className="trend-panel">
+            <div className="trend-header">
+              <span className="trend-title">Buscas recentes</span>
+            </div>
+            <div className="trend-list">
+              {recentSearches.length > 0 ? (
+                recentSearches.map((t, idx) => (
+                  <button key={idx} className="trend-chip" onClick={() => handleChipClick(t)}>
+                    {t}
+                  </button>
+                ))
+              ) : (
+                <span className="trend-empty">Nenhuma busca recente</span>
+              )}
+            </div>
+          </div>
+
+          <div className="trend-panel">
+            <div className="trend-header">
+              <span className="trend-title">Mais buscadas</span>
+            </div>
+            <div className="trend-list">
+              {topSearches.length > 0 ? (
+                topSearches.map(({ term, count }, idx) => (
+                  <button key={idx} className="trend-chip" title={`${count} vezes`} onClick={() => handleChipClick(term)}>
+                    {term}
+                  </button>
+                ))
+              ) : (
+                <span className="trend-empty">Aguardando buscas</span>
+              )}
+            </div>
           </div>
         </div>
       </section>
