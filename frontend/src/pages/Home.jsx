@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Send } from 'lucide-react';
+import { motion, useAnimation, AnimatePresence } from 'framer-motion';
+import marketingPhrases from '../data/marketingPhrases';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
@@ -7,6 +9,13 @@ export default function Home() {
   const [question, setQuestion] = useState('');
   const [answer, setAnswer] = useState('');
   const [loading, setLoading] = useState(false);
+  const [currentPhraseIndex, setCurrentPhraseIndex] = useState(
+    Math.floor(Math.random() * marketingPhrases.length)
+  );
+  const mainTitleControls = useAnimation();
+  const mainTitleRef = useRef(null);
+  const mainTitleInterval = useRef(null);
+  const phraseInterval = useRef(null);
 
   const handleAskQuestion = async () => {
     if (!question.trim()) return;
@@ -33,16 +42,103 @@ export default function Home() {
     }
   };
 
+  // Function to randomly animate characters in the main title
+  const animateMainTitle = () => {
+    if (!mainTitleRef.current) return;
+    
+    // Select a random character to animate
+    const titleText = mainTitleRef.current.textContent;
+    const charIndex = Math.floor(Math.random() * titleText.length);
+    
+    // Create a temporary span for the character
+    const charSpan = document.createElement('span');
+    charSpan.className = 'animated-char';
+    charSpan.textContent = titleText[charIndex];
+    
+    // Apply animation
+    const animationType = Math.floor(Math.random() * 3);
+    switch(animationType) {
+      case 0:
+        charSpan.classList.add('pulse-animation');
+        break;
+      case 1:
+        charSpan.classList.add('glow-animation');
+        break;
+      case 2:
+        charSpan.classList.add('bounce-animation');
+        break;
+      default:
+        charSpan.classList.add('pulse-animation');
+    }
+  };
+
+  // Change the marketing phrase periodically
+  useEffect(() => {
+    phraseInterval.current = setInterval(() => {
+      setCurrentPhraseIndex(prevIndex => {
+        let newIndex;
+        do {
+          newIndex = Math.floor(Math.random() * marketingPhrases.length);
+        } while (newIndex === prevIndex);
+        return newIndex;
+      });
+    }, 10000); // Change every 10 seconds
+
+    return () => clearInterval(phraseInterval.current);
+  }, []);
+
+  // Setup main title animation interval
+  useEffect(() => {
+    mainTitleInterval.current = setInterval(() => {
+      animateMainTitle();
+    }, Math.random() * 10000 + 20000); // Random between 20-30 seconds
+    
+    // Initial animation
+    mainTitleControls.start({
+      opacity: 1,
+      y: 0,
+      transition: { duration: 0.8, ease: [0.16, 1, 0.3, 1] } // Exponential ease out
+    });
+
+    return () => clearInterval(mainTitleInterval.current);
+  }, [mainTitleControls]);
+
   return (
     <main className="main-content">
       <section className="hero">
         <div className="hero-container">
-          <h1>
-            Resolva questões jurídicas com <span className="accent-text">inteligência artificial</span>
-          </h1>
-          <p>
-            Democratizando o acesso à justiça através de IA avançada. Obtenha orientações jurídicas precisas em segundos.
-          </p>
+          <motion.h1
+            ref={mainTitleRef}
+            initial={{ opacity: 0, y: -20 }}
+            animate={mainTitleControls}
+            className="main-title"
+          >
+            Resolva questões jurídicas com <motion.span 
+              className="accent-text"
+              initial={{ scale: 0.9 }}
+              animate={{ scale: 1 }}
+              transition={{ 
+                duration: 1.2, 
+                ease: [0.34, 1.56, 0.64, 1] // Spring-like bounce
+              }}
+            >inteligência artificial</motion.span>
+          </motion.h1>
+          
+          <AnimatePresence mode="wait">
+            <motion.p
+              key={currentPhraseIndex}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ 
+                duration: 0.5, 
+                ease: 'easeInOut'
+              }}
+              className="marketing-phrase"
+            >
+              {marketingPhrases[currentPhraseIndex]}
+            </motion.p>
+          </AnimatePresence>
 
           <div className="chat-interface">
             <div className="chat-input-container">

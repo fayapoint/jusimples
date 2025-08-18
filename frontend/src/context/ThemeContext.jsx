@@ -7,7 +7,7 @@ export function useTheme() {
 }
 
 export function ThemeProvider({ children }) {
-  const [theme, setTheme] = useState('normal'); // normal, dark, light
+  const [theme, setTheme] = useState('normal'); // normal, dark, light, original
 
   useEffect(() => {
     // Load theme from localStorage on initial load
