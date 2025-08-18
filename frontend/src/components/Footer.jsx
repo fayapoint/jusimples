@@ -95,7 +95,7 @@ export default function Footer() {
       selector.removeEventListener('mouseleave', onLeave);
       selector.removeEventListener('mousedown', onMouseDown);
     };
-  }, []);
+  }, [scheduleCollapse]);
   
   return (
     <footer 
