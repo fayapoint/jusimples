@@ -485,6 +485,66 @@ def get_legal_data():
         "last_updated": datetime.utcnow().isoformat()
     })
 
+@app.route('/api/news')
+def get_news():
+    """Return a small curated list of legal-related news (mock data)."""
+    news = [
+        {
+            "id": 1,
+            "title": "STF decide sobre tema de repercussão geral",
+            "summary": "Corte define tese com impacto em milhares de processos em todo o país.",
+            "url": "https://www.stf.jus.br/",
+            "thumbnail": "https://placehold.co/176x120/111111/FFFFFF?text=STF"
+        },
+        {
+            "id": 2,
+            "title": "CNJ publica novas diretrizes para gestão processual",
+            "summary": "Normas buscam acelerar tramitação e padronizar procedimentos.",
+            "url": "https://www.cnj.jus.br/",
+            "thumbnail": "https://placehold.co/176x120/111111/FFFFFF?text=CNJ"
+        },
+        {
+            "id": 3,
+            "title": "Mudanças no CDC entram em vigor",
+            "summary": "Alterações reforçam direitos do consumidor em compras online.",
+            "url": "https://www.gov.br/",
+            "thumbnail": "https://placehold.co/176x120/111111/FFFFFF?text=CDC"
+        },
+        {
+            "id": 4,
+            "title": "Tribunais adotam ferramentas de IA",
+            "summary": "Tecnologias auxiliam na triagem e priorização de processos.",
+            "url": "https://www.cnj.jus.br/",
+            "thumbnail": "https://placehold.co/176x120/111111/FFFFFF?text=IA+no+Jud"
+        },
+    ]
+    return jsonify({"news": news, "updated_at": datetime.utcnow().isoformat()})
+
+@app.route('/api/ads')
+def get_ads():
+    """Return simple sponsored cards (mock data)."""
+    ads = [
+        {
+            "id": 101,
+            "title": "Assine JuSimples Pro",
+            "url": "https://jusimples.netlify.app/",
+            "image": "https://placehold.co/640x360/1f1f23/FFFFFF?text=JuSimples+Pro"
+        },
+        {
+            "id": 102,
+            "title": "Modelo de Contratos (Grátis)",
+            "url": "https://jusbrasil.com.br/",
+            "image": "https://placehold.co/640x360/1f1f23/FFFFFF?text=Contratos"
+        },
+        {
+            "id": 103,
+            "title": "Consultoria Jurídica On‑Demand",
+            "url": "https://www.oab.org.br/",
+            "image": "https://placehold.co/640x360/1f1f23/FFFFFF?text=Consultoria"
+        },
+    ]
+    return jsonify({"ads": ads, "updated_at": datetime.utcnow().isoformat()})
+
 @app.errorhandler(404)
 def not_found(error):
     return jsonify({"error": "Endpoint não encontrado"}), 404
