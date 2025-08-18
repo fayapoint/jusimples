@@ -181,7 +181,7 @@ export default function AnimatedBackground() {
       window.removeEventListener('resize', resizeCanvas);
       cancelAnimationFrame(animationFrameId);
     };
-  }, [theme, backgroundColor]);
+  }, [theme, backgroundColor, backgroundType]);
   
   // Don't render if background type is not animated
   if (backgroundType !== 'animated') {

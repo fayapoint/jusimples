@@ -1,12 +1,8 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useTheme } from '../context/ThemeContext';
 // Icons temporarily removed to fix compilation errors
 
 export default function Documentos() {
-  // Use theme for conditional styling if needed
-  const { theme } = useTheme();
-  // Theme is used for potential styling
   const [activeCategory, setActiveCategory] = useState('todos');
   const [searchQuery, setSearchQuery] = useState('');
 
