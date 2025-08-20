@@ -915,6 +915,65 @@ def api_admin_delete_legal_chunk(doc_id: str):
         logger.error(f"delete_legal_chunk endpoint error: {e}")
         return jsonify({"success": False, "error": "Failed to delete document"}), 500
 
+
+@app.route('/api/popular-searches', methods=['GET'])
+def api_popular_searches():
+    """Get global popular searches from database for anonymous users"""
+    if not SEMANTIC_AVAILABLE:
+        # Return some fallback popular searches if database not available
+        fallback_searches = [
+            "direitos trabalhistas", 
+            "férias remuneradas",
+            "demissão por justa causa",
+            "licença maternidade",
+            "horas extras",
+            "rescisão contrato trabalho",
+            "direitos consumidor",
+            "contrato locação"
+        ]
+        return jsonify({"popular_searches": fallback_searches})
+    
+    try:
+        from retrieval import get_popular_queries
+        
+        # Get popular queries from last 30 days
+        popular_queries = get_popular_queries(limit=8, days=30)
+        
+        # Extract just the terms for the frontend
+        search_terms = [q.get('query', '') for q in popular_queries if q.get('query')]
+        
+        # If no popular searches yet, return fallback
+        if not search_terms:
+            fallback_searches = [
+                "direitos trabalhistas", 
+                "férias remuneradas", 
+                "demissão por justa causa",
+                "licença maternidade",
+                "horas extras",
+                "rescisão contrato trabalho",
+                "direitos consumidor",
+                "contrato locação"
+            ]
+            return jsonify({"popular_searches": fallback_searches})
+        
+        return jsonify({"popular_searches": search_terms})
+        
+    except Exception as e:
+        logger.error(f"Error getting popular searches: {e}")
+        
+        # Return fallback searches on error
+        fallback_searches = [
+            "direitos trabalhistas",
+            "férias remuneradas", 
+            "demissão por justa causa",
+            "licença maternidade",
+            "horas extras",
+            "rescisão contrato trabalho",
+            "direitos consumidor",
+            "contrato locação"
+        ]
+        return jsonify({"popular_searches": fallback_searches})
+
 @app.errorhandler(404)
 def not_found(error):
     return jsonify({"error": "Endpoint não encontrado"}), 404

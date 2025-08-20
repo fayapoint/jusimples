@@ -18,6 +18,7 @@ export default function Home() {
   const phraseInterval = useRef(null);
   const [recentSearches, setRecentSearches] = useState([]);
   const [topSearches, setTopSearches] = useState([]);
+  const [globalPopularSearches, setGlobalPopularSearches] = useState([]);
   const inputRef = useRef(null);
 
   // Search history helpers
@@ -118,6 +119,26 @@ export default function Home() {
     return () => clearInterval(phraseInterval.current);
   }, []);
 
+  // Fetch global popular searches from database
+  const fetchGlobalPopularSearches = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/popular-searches`);
+      const data = await response.json();
+      setGlobalPopularSearches(data.popular_searches || []);
+    } catch (error) {
+      console.log('Could not fetch global popular searches, using fallback');
+      // Fallback popular searches if API fails
+      setGlobalPopularSearches([
+        'direitos trabalhistas',
+        'férias remuneradas',
+        'demissão por justa causa',
+        'licença maternidade',
+        'horas extras',
+        'rescisão contrato trabalho'
+      ]);
+    }
+  };
+
   // Load search history on mount
   useEffect(() => {
     try {
@@ -132,6 +153,9 @@ export default function Home() {
     } catch (err) {
       // ignore malformed localStorage
     }
+    
+    // Always fetch global popular searches for anonymous users
+    fetchGlobalPopularSearches();
   }, []);
 
   // Setup main title animation interval
@@ -250,6 +274,12 @@ export default function Home() {
               {topSearches.length > 0 ? (
                 topSearches.map(({ term, count }, idx) => (
                   <button key={idx} className="trend-chip" title={`${count} vezes`} onClick={() => handleChipClick(term)}>
+                    {term}
+                  </button>
+                ))
+              ) : globalPopularSearches.length > 0 ? (
+                globalPopularSearches.map((term, idx) => (
+                  <button key={idx} className="trend-chip" onClick={() => handleChipClick(term)}>
                     {term}
                   </button>
                 ))
