@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import HeroImage from '../components/HeroImage';
+import SearchAskPanel from '../components/SearchAskPanel';
 
 export default function Consumidores() {
   // Use theme for conditional styling if needed
@@ -35,6 +36,12 @@ export default function Consumidores() {
           </a>
         </div>
       </div>
+
+      <section className="interactive-section">
+        <h2 className="section-title">Pesquise ou Pergunte</h2>
+        <p className="section-subtitle">Use a busca semântica para encontrar trechos relevantes ou faça uma pergunta para a IA com fontes.</p>
+        <SearchAskPanel />
+      </section>
 
       <section className="features-section">
         <h2 className="section-title">Como a JuSimples pode te ajudar</h2>

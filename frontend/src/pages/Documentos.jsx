@@ -1,10 +1,54 @@
-import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { Link, useParams, useLocation } from 'react-router-dom';
 // Icons temporarily removed to fix compilation errors
 
 export default function Documentos() {
+  const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+  const { id: routeId } = useParams();
+  const location = useLocation();
   const [activeCategory, setActiveCategory] = useState('todos');
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedDoc, setSelectedDoc] = useState(null);
+  const [loadingDoc, setLoadingDoc] = useState(false);
+  const [docError, setDocError] = useState(null);
+
+  // Fetch document when deep-linked via /documentos/:id or /documentos?source=ID
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const qId = params.get('source') || params.get('id');
+    const effectiveId = routeId || qId;
+    if (!effectiveId) {
+      setSelectedDoc(null);
+      setDocError(null);
+      setLoadingDoc(false);
+      return;
+    }
+    let cancelled = false;
+    async function run() {
+      try {
+        setLoadingDoc(true);
+        setDocError(null);
+        setSelectedDoc(null);
+        const res = await fetch(`${API_URL}/api/documentos/${encodeURIComponent(effectiveId)}`);
+        if (!res.ok) {
+          // Try query param fallback
+          const res2 = await fetch(`${API_URL}/api/documentos?id=${encodeURIComponent(effectiveId)}`);
+          if (!res2.ok) throw new Error('Falha ao carregar documento');
+          const data2 = await res2.json();
+          if (!cancelled) setSelectedDoc(data2);
+        } else {
+          const data = await res.json();
+          if (!cancelled) setSelectedDoc(data);
+        }
+      } catch (e) {
+        if (!cancelled) setDocError(e.message || 'Erro ao carregar documento');
+      } finally {
+        if (!cancelled) setLoadingDoc(false);
+      }
+    }
+    run();
+    return () => { cancelled = true; };
+  }, [routeId, location.search, API_URL]);
 
   const documentCategories = [
     { id: 'todos', name: 'Todos', icon: '📄' },
@@ -146,6 +190,44 @@ export default function Documentos() {
 
   return (
     <div className="page-container documents-page">
+      {routeId || new URLSearchParams(location.search).get('source') || new URLSearchParams(location.search).get('id') ? (
+        <section className="kb-document-section" style={{ marginBottom: 24 }}>
+          <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+            <h2 className="section-title" style={{ margin: 0 }}>Documento da Base de Conhecimento</h2>
+            <Link to="/documentos" className="btn btn-sm btn-outline-secondary">Fechar</Link>
+          </div>
+          {loadingDoc && (
+            <div className="alert" style={{ marginTop: 12 }}>Carregando documento...</div>
+          )}
+          {docError && (
+            <div className="alert alert-error" style={{ marginTop: 12 }}>{docError}</div>
+          )}
+          {selectedDoc && (
+            <div className="card" style={{ padding: 16, marginTop: 12, border: '1px solid var(--border, rgba(255,255,255,0.1))', borderRadius: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                <h3 style={{ margin: 0 }}>{selectedDoc.title || 'Sem título'}</h3>
+                {typeof selectedDoc.id === 'string' && (
+                  <small style={{ opacity: 0.8 }}>id: {selectedDoc.id}</small>
+                )}
+              </div>
+              <div style={{ marginTop: 8, fontSize: 13, opacity: 0.85 }}>
+                <div>Categoria: {selectedDoc.category || 'n/d'}</div>
+                {selectedDoc.published_at && <div>Publicado em: {selectedDoc.published_at}</div>}
+                {selectedDoc.jurisdiction && <div>Jurisdição: {selectedDoc.jurisdiction}</div>}
+                {selectedDoc.source_type && <div>Tipo: {selectedDoc.source_type}</div>}
+                {selectedDoc.source_url && (
+                  <div>
+                    Fonte: <a href={selectedDoc.source_url} target="_blank" rel="noreferrer">{selectedDoc.source_url}</a>
+                  </div>
+                )}
+              </div>
+              <div style={{ marginTop: 12 }}>
+                <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit', fontSize: 14, lineHeight: 1.6 }}>{selectedDoc.content || ''}</pre>
+              </div>
+            </div>
+          )}
+        </section>
+      ) : null}
       <div className="hero-section">
         <h1 className="page-title">Documentos Automáticos</h1>
         <div className="divider"></div>

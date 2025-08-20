@@ -128,6 +128,7 @@ function App() {
                     <Route path="/empresas" element={<Empresas />} />
                     <Route path="/advogados" element={<Advogados />} />
                     <Route path="/documentos" element={<Documentos />} />
+                    <Route path="/documentos/:id" element={<Documentos />} />
                   </Routes>
                 </div>
                 <Footer />

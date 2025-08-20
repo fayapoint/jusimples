@@ -147,6 +147,16 @@ JuSimples aims to democratize access to legal information in Brazil by:
 - **Technology Stack**: Python, React, Vector DB, LLM APIs
 - **Compliance**: LGPD-ready with enterprise security
 
+## 📚 Documentation
+
+- RAG Overview (current system): [docs/RAG_CURRENT.md](docs/RAG_CURRENT.md)
+- Best Practices (2024–2025): [docs/RAG_BEST_PRACTICES_2025.md](docs/RAG_BEST_PRACTICES_2025.md)
+- Vector DB Evaluation: [docs/VECTOR_DB_EVAL.md](docs/VECTOR_DB_EVAL.md)
+- Brazilian Legal Data Sources: [docs/LEGAL_DATA_SOURCES_BR.md](docs/LEGAL_DATA_SOURCES_BR.md)
+- Target Legal Doc Schema: [docs/LEGAL_DOC_SCHEMA.md](docs/LEGAL_DOC_SCHEMA.md)
+- Gaps & Risks vs Best Practices: [docs/GAPS_AND_RISKS.md](docs/GAPS_AND_RISKS.md)
+- PRD: JuSimples RAG v2: [docs/PRD_JUSIMPLES_RAG_V2.md](docs/PRD_JUSIMPLES_RAG_V2.md)
+
 ## 🤝 Contributing
 
 This project is currently in active development. Contributions will be welcomed once the MVP is complete.
