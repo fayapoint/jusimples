@@ -75,3 +75,12 @@ coverage/
 # Build outputs
 build/
 dist/
+
+# Test files with potential secrets
+backend/*test*.py
+backend/*_test.py
+backend/test_*.py
+backend/make_real_api_calls.py
+backend/complete_schema_fix.py
+backend/fix_db_now.py
+backend/emergency_schema_fix.py

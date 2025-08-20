@@ -27,10 +27,13 @@ OPENAI_COLUMNS = [
 def update_schema():
     print("🔄 Adding comprehensive OpenAI analytics columns...")
     
-    db_url = "postgresql://postgres.ugbplcahdqjgercuqvsr:5bNVhwx5%24z%23%3FL%3Fw@aws-1-sa-east-1.pooler.supabase.com:6543/postgres?sslmode=require"
+    DATABASE_URL = os.environ.get('DATABASE_URL')
+    if not DATABASE_URL:
+        print("❌ DATABASE_URL environment variable not set")
+        return
     
     try:
-        conn = psycopg.connect(db_url, sslmode='require')
+        conn = psycopg.connect(DATABASE_URL, sslmode='require')
         conn.autocommit = True
         
         with conn.cursor() as cur:
