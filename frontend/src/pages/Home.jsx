@@ -215,13 +215,13 @@ export default function Home() {
       const response = await fetch(`${API_URL}/api/popular-searches`);
       const data = await response.json();
       
-      // Only use actual database searches - no fallbacks
-      if (data.from_database && data.popular_searches) {
+      // Use popular searches from database or defaults
+      if (data.popular_searches && data.popular_searches.length > 0) {
         setGlobalPopularSearches(data.popular_searches);
-        console.log(`Loaded ${data.total_found} popular searches from database`);
+        console.log(`Loaded ${data.total_found} popular searches (from ${data.from_database ? 'database' : 'defaults'})`);
       } else {
         setGlobalPopularSearches([]);
-        console.log('No popular searches found in database yet');
+        console.log('No popular searches available');
       }
     } catch (error) {
       console.log('Could not fetch popular searches from database');

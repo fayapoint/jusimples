@@ -951,8 +951,27 @@ def api_admin_delete_legal_chunk(doc_id: str):
 @app.route('/api/popular-searches', methods=['GET'])
 def api_popular_searches():
     """Get popular searches from actual database logs (search_logs and ask_logs)"""
+    # Default Brazilian legal search examples for new users
+    default_searches = [
+        "direitos do consumidor",
+        "rescisão de contrato de trabalho", 
+        "danos morais",
+        "aposentadoria por invalidez",
+        "divórcio consensual",
+        "usucapião",
+        "pensão alimentícia",
+        "direitos trabalhistas",
+        "indenização por danos materiais",
+        "revisão de aposentadoria"
+    ]
+    
     if not SEMANTIC_AVAILABLE:
-        return jsonify({"popular_searches": []})
+        return jsonify({
+            "popular_searches": default_searches,
+            "search_data": [{"term": term, "count": 0, "types": "example"} for term in default_searches],
+            "from_database": False,
+            "total_found": len(default_searches)
+        })
     
     try:
         from retrieval import get_popular_queries
@@ -971,21 +990,31 @@ def api_popular_searches():
                     'success_rate': q.get('success_rate', 100)
                 })
         
-        # Return actual database data only
-        return jsonify({
-            "popular_searches": [item['term'] for item in search_data],
-            "search_data": search_data,
-            "from_database": True,
-            "total_found": len(search_data)
-        })
+        # If we have real data, use it; otherwise use defaults
+        if search_data:
+            return jsonify({
+                "popular_searches": [item['term'] for item in search_data],
+                "search_data": search_data,
+                "from_database": True,
+                "total_found": len(search_data)
+            })
+        else:
+            # No searches yet, return defaults
+            return jsonify({
+                "popular_searches": default_searches,
+                "search_data": [{"term": term, "count": 0, "types": "example"} for term in default_searches],
+                "from_database": False,
+                "total_found": len(default_searches)
+            })
         
     except Exception as e:
         logger.error(f"Error getting popular searches: {e}")
+        # Return default Brazilian legal search examples for new users
         return jsonify({
-            "popular_searches": [],
-            "search_data": [],
+            "popular_searches": default_searches,
+            "search_data": [{"term": term, "count": 0, "types": "example"} for term in default_searches],
             "from_database": False,
-            "error": str(e)
+            "total_found": len(default_searches)
         })
 
 @app.errorhandler(404)
