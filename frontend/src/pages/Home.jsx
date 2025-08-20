@@ -395,95 +395,79 @@ export default function Home() {
               </div>
             </div>
             <div className="trend-list">
-              {topSearches.length > 0 ? (
-                sortAndFilterSearches(topSearches, true).map(({ term, count }, idx) => {
-                  const itemKey = `local-${idx}`;
-                  return (
+              {(() => {
+                // Combine local and global searches for better UX
+                const localSearches = sortAndFilterSearches(topSearches, true).map(({ term, count }, idx) => ({
+                  term,
+                  count,
+                  type: 'local',
+                  key: `local-${idx}`,
+                  badge: `${count}x`,
+                  title: `Sua busca - ${count} vezes`
+                }));
+
+                const globalSearches = sortAndFilterSearches(globalPopularSearches, false)
+                  .filter(term => !localSearches.some(local => local.term.toLowerCase() === term.toLowerCase()))
+                  .map((term, idx) => ({
+                    term,
+                    count: 0,
+                    type: 'global',
+                    key: `global-${idx}`,
+                    badge: 'Popular',
+                    title: 'Busca popular da comunidade'
+                  }));
+
+                // Show local searches first, then global ones (up to 12 total)
+                const combinedSearches = [...localSearches, ...globalSearches].slice(0, 12);
+
+                return combinedSearches.length > 0 ? (
+                  combinedSearches.map((search) => (
                     <div 
-                      key={idx} 
+                      key={search.key} 
                       className="trend-item-enhanced"
-                      onMouseEnter={() => handleItemHover(itemKey)}
+                      onMouseEnter={() => handleItemHover(search.key)}
                       onMouseLeave={handleItemLeave}
                     >
                       <button 
-                        className={`trend-chip-enhanced popular ${categorizeSearch(term)}`}
-                        onClick={() => handleChipClick(term)}
-                        title={`Buscado ${count} vezes - Clique para pesquisar`}
+                        className={`trend-chip-enhanced ${search.type} ${categorizeSearch(search.term)}`}
+                        onClick={() => handleChipClick(search.term)}
+                        title={`${search.title} - Clique para pesquisar`}
                       >
-                        <span className="chip-text">{term}</span>
+                        <span className="chip-text">{search.term}</span>
                         <div className="chip-metadata">
-                          <span className="chip-count">{count}x</span>
-                          <span className="chip-category">{categorizeSearch(term)}</span>
+                          <span className={search.type === 'local' ? 'chip-count' : 'chip-badge'}>
+                            {search.badge}
+                          </span>
+                          <span className="chip-category">{categorizeSearch(search.term)}</span>
                           <span className="chip-action">🔍</span>
                         </div>
                       </button>
-                      <div className={`trend-actions ${hoveredItem === itemKey ? 'show' : ''}`}>
+                      <div className={`trend-actions ${hoveredItem === search.key ? 'show' : ''}`}>
                         <button 
                           className="action-btn explore"
-                          onClick={() => handleChipClick(`mais informações sobre ${term}`)}
+                          onClick={() => handleChipClick(`mais informações sobre ${search.term}`)}
                           title="Explorar mais detalhes"
                         >
                           📊 Explorar
                         </button>
                         <button 
                           className="action-btn related"
-                          onClick={() => handleChipClick(`questões relacionadas a ${term}`)}
+                          onClick={() => handleChipClick(`questões relacionadas a ${search.term}`)}
                           title="Ver temas relacionados"
                         >
                           🔗 Relacionados
                         </button>
                       </div>
                     </div>
-                  );
-                })
-              ) : globalPopularSearches.length > 0 ? (
-                sortAndFilterSearches(globalPopularSearches, false).map((term, idx) => {
-                  const itemKey = `global-${idx}`;
-                  return (
-                    <div 
-                      key={idx} 
-                      className="trend-item-enhanced"
-                      onMouseEnter={() => handleItemHover(itemKey)}
-                      onMouseLeave={handleItemLeave}
-                    >
-                      <button 
-                        className={`trend-chip-enhanced global ${categorizeSearch(term)}`}
-                        onClick={() => handleChipClick(term)}
-                        title="Clique para pesquisar"
-                      >
-                        <span className="chip-text">{term}</span>
-                        <div className="chip-metadata">
-                          <span className="chip-badge">Popular</span>
-                          <span className="chip-category">{categorizeSearch(term)}</span>
-                          <span className="chip-action">🔍</span>
-                        </div>
-                      </button>
-                      <div className={`trend-actions ${hoveredItem === itemKey ? 'show' : ''}`}>
-                        <button 
-                          className="action-btn explore"
-                          onClick={() => handleChipClick(`mais informações sobre ${term}`)}
-                          title="Explorar mais detalhes"
-                        >
-                          📊 Explorar
-                        </button>
-                        <button 
-                          className="action-btn related"
-                          onClick={() => handleChipClick(`questões relacionadas a ${term}`)}
-                          title="Ver temas relacionados"
-                        >
-                          🔗 Relacionados
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })
-              ) : (
-                <div className="trend-empty-state">
-                  <span className="empty-icon">⏳</span>
-                  <span className="empty-text">Aguardando buscas</span>
-                  <span className="empty-subtitle">As consultas mais populares aparecerão aqui</span>
-                </div>
-              )}
+                  ))
+                ) : (
+                  <div className="trend-empty-state">
+                    <span className="empty-icon">⏳</span>
+                    <span className="empty-text">Aguardando buscas</span>
+                    <span className="empty-subtitle">As consultas mais populares aparecerão aqui</span>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </div>
