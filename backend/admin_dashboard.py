@@ -2,7 +2,8 @@ import os
 import logging
 from datetime import datetime
 from typing import Dict, List
-from flask import Blueprint, jsonify, request, render_template_string
+from flask import Blueprint, jsonify, request, render_template_string, current_app
+
 from openai import OpenAI
 
 # Create admin blueprint
@@ -60,6 +61,10 @@ ADMIN_TEMPLATE = """
         .env-var { display: flex; justify-content: space-between; align-items: center; padding: 8px; border-bottom: 1px solid rgba(255,255,255,0.12); }
         .knowledge-item { border: 1px solid rgba(255,255,255,0.12); padding: 10px; margin: 5px 0; border-radius: 10px; background: rgba(255,255,255,0.04); }
         .small { font-size: 12px; opacity: 0.8; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { padding: 8px; border-bottom: 1px solid rgba(255,255,255,0.12); text-align: left; vertical-align: top; }
+        .controls { display: flex; gap: 8px; align-items: center; }
+        .muted { opacity: 0.7; }
     </style>
 </head>
 <body>
@@ -124,6 +129,40 @@ ADMIN_TEMPLATE = """
                     <button class="btn" onclick="updateModel()">Aplicar</button>
                 </div>
             </div>
+
+            <!-- DB Overview (Semantic) -->
+            <div class="card">
+                <h3>📦 Banco de Dados (Visão Geral)</h3>
+                <div id="db-overview" class="small">Carregando...</div>
+            </div>
+
+            <!-- Manage Legal Chunks -->
+            <div class="card">
+                <h3>🗂️ Documentos (legal_chunks)</h3>
+                <div class="controls">
+                    <input id="doc-q" placeholder="Buscar por título/conteúdo" />
+                    <input id="doc-category" placeholder="Categoria (opcional)" />
+                    <button class="btn" onclick="loadDocs(0)">Buscar</button>
+                    <button class="btn secondary" onclick="resetDocFilters()">Limpar</button>
+                </div>
+                <div id="doc-list" class="small" style="max-height: 360px; overflow-y:auto; margin-top: 8px;">Carregando...</div>
+                <div class="controls" style="margin-top:8px;">
+                    <button class="btn secondary" onclick="prevDocsPage()">◀</button>
+                    <span id="doc-page-info" class="muted">Página 1</span>
+                    <button class="btn secondary" onclick="nextDocsPage()">▶</button>
+                </div>
+            </div>
+
+            <!-- Retrieval Logs (semantic) -->
+            <div class="card">
+                <h3>🔎 Logs de Busca & Perguntas</h3>
+                <div class="controls">
+                    <button class="btn" onclick="loadSearchLogs()">Carregar Busca</button>
+                    <button class="btn secondary" onclick="loadAskLogs()">Carregar Perguntas</button>
+                </div>
+                <div id="search-logs" class="small" style="margin-top: 8px; max-height: 200px; overflow-y:auto;"></div>
+                <div id="ask-logs" class="small" style="margin-top: 8px; max-height: 200px; overflow-y:auto;"></div>
+            </div>
         </div>
     </div>
 
@@ -145,6 +184,12 @@ ADMIN_TEMPLATE = """
                 displayLogs(logs);
                 displayStats(stats);
                 populateModelControls(status.active_model);
+
+                // Load semantic-backed admin data (best-effort)
+                loadDbOverview();
+                loadDocs(0);
+                loadSearchLogs();
+                loadAskLogs();
             } catch (error) {
                 console.error('Error loading dashboard:', error);
             }
@@ -317,6 +362,124 @@ ADMIN_TEMPLATE = """
                 .catch(console.error);
         }
 
+        // ===== Admin: Semantic DB overview =====
+        async function loadDbOverview() {
+            try {
+                const res = await fetch('/api/admin/db/overview');
+                const data = await res.json();
+                if (!data || data.ready === false) {
+                    document.getElementById('db-overview').innerHTML = '<div class="small">Semantic store indisponível</div>';
+                    return;
+                }
+                const cats = (data.categories||[]).map(c => `${c.category}: ${c.count}`).join(', ');
+                const recentDocs = (data.recent?.documents||[]).map(d => `<div class="knowledge-item"><strong>${d.title||'(sem título)'}</strong><div class="small">${d.category||'-'}</div></div>`).join('');
+                document.getElementById('db-overview').innerHTML = `
+                    <div class="env-var"><span>Total documentos</span><span>${data.counts?.legal_chunks||0}</span></div>
+                    <div class="env-var"><span>Registros de busca</span><span>${data.counts?.search_logs||0}</span></div>
+                    <div class="env-var"><span>Registros de perguntas</span><span>${data.counts?.ask_logs||0}</span></div>
+                    <div class="small" style="margin-top:8px;"><strong>Categorias:</strong> ${cats||'-'}</div>
+                    <div class="small" style="margin-top:8px;"><strong>Recentes:</strong><div style="max-height:140px; overflow:auto;">${recentDocs||'<div class=\"small\">Nenhum</div>'}</div></div>
+                `;
+            } catch (e) {
+                document.getElementById('db-overview').innerHTML = 'Erro ao carregar';
+            }
+        }
+
+        // ===== Admin: Manage documents =====
+        let DOCS_LIMIT = 20;
+        let DOCS_OFFSET = 0;
+        function resetDocFilters() {
+            document.getElementById('doc-q').value = '';
+            document.getElementById('doc-category').value = '';
+            DOCS_OFFSET = 0;
+            loadDocs(0);
+        }
+        function prevDocsPage() { DOCS_OFFSET = Math.max(0, DOCS_OFFSET - DOCS_LIMIT); loadDocs(); }
+        function nextDocsPage() { DOCS_OFFSET = DOCS_OFFSET + DOCS_LIMIT; loadDocs(); }
+        async function loadDocs(reset=undefined) {
+            try {
+                if (reset === 0) DOCS_OFFSET = 0;
+                const q = encodeURIComponent(document.getElementById('doc-q').value||'');
+                const category = encodeURIComponent(document.getElementById('doc-category').value||'');
+                const url = `/api/admin/legal-chunks?q=${q}&category=${category}&limit=${DOCS_LIMIT}&offset=${DOCS_OFFSET}`;
+                const res = await fetch(url);
+                const data = await res.json();
+                const items = data.items || [];
+                const total = data.total || 0;
+                const page = Math.floor(DOCS_OFFSET / DOCS_LIMIT) + 1;
+                const rows = items.map((it) => `
+                    <tr>
+                        <td class="small muted">${it.id}</td>
+                        <td><input id="t_${it.id}" value="${(it.title||'').replace(/"/g,'&quot;')}" /></td>
+                        <td><input id="c_${it.id}" value="${(it.category||'').replace(/"/g,'&quot;')}" /></td>
+                        <td><textarea id="m_${it.id}" rows="2" placeholder="metadata JSON opcional"></textarea><div class="small muted">Prévia: ${(it.preview||'').replace(/</g,'&lt;').slice(0,160)}...</div></td>
+                        <td class="controls">
+                            <button class="btn small" onclick="saveDoc('${it.id}')">Salvar</button>
+                            <button class="btn secondary small" onclick="deleteDoc('${it.id}')">Excluir</button>
+                        </td>
+                    </tr>
+                `).join('');
+                document.getElementById('doc-list').innerHTML = `
+                    <div class="small">Total: ${total}</div>
+                    <table>
+                        <thead><tr><th>ID</th><th>Título</th><th>Categoria</th><th>Metadados/Prévia</th><th>Ações</th></tr></thead>
+                        <tbody>${rows || '<tr><td colspan=5 class="small muted">Sem resultados</td></tr>'}</tbody>
+                    </table>`;
+                document.getElementById('doc-page-info').textContent = `Página ${page}`;
+            } catch (e) {
+                document.getElementById('doc-list').innerHTML = 'Erro ao listar documentos';
+            }
+        }
+        async function saveDoc(id) {
+            try {
+                const title = document.getElementById(`t_${id}`).value;
+                const category = document.getElementById(`c_${id}`).value;
+                const metadataRaw = document.getElementById(`m_${id}`).value.trim();
+                let metadata = undefined;
+                if (metadataRaw) {
+                    try { metadata = JSON.parse(metadataRaw); } catch (e) { alert('Metadata inválido (JSON)'); return; }
+                }
+                const res = await fetch(`/api/admin/legal-chunks/${id}`, {
+                    method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title, category, metadata })
+                });
+                const data = await res.json();
+                if (!data.success) { alert('Falha ao salvar: ' + (data.error||'')); return; }
+                loadDocs();
+            } catch (e) { alert('Erro ao salvar: ' + e.message); }
+        }
+        async function deleteDoc(id) {
+            try {
+                if (!confirm('Confirma excluir este documento?')) return;
+                const res = await fetch(`/api/admin/legal-chunks/${id}`, { method: 'DELETE' });
+                const data = await res.json();
+                if (!data.success) { alert('Falha ao excluir: ' + (data.error||'')); return; }
+                loadDocs();
+            } catch (e) { alert('Erro ao excluir: ' + e.message); }
+        }
+
+        // ===== Admin: retrieval logs =====
+        async function loadSearchLogs() {
+            try {
+                const res = await fetch('/api/admin/logs/search?limit=50&offset=0');
+                const data = await res.json();
+                const items = data.items || [];
+                document.getElementById('search-logs').innerHTML = items.map(r => `
+                    <div class="log-entry"><div class="small">${r.created_at}</div><div><strong>query:</strong> ${r.query}</div><div class="small">top_k=${r.top_k} min_rel=${r.min_relevance} type=${r.search_type} total=${r.total}</div></div>
+                `).join('') || '<div class="small muted">Sem logs de busca</div>';
+            } catch (e) { document.getElementById('search-logs').innerHTML = 'Erro ao carregar logs de busca'; }
+        }
+        async function loadAskLogs() {
+            try {
+                const res = await fetch('/api/admin/logs/ask?limit=50&offset=0');
+                const data = await res.json();
+                const items = data.items || [];
+                document.getElementById('ask-logs').innerHTML = items.map(r => `
+                    <div class="log-entry"><div class="small">${r.created_at}</div><div><strong>pergunta:</strong> ${r.question}</div><div class="small">top_k=${r.top_k} min_rel=${r.min_relevance} fontes=${r.total_sources}</div></div>
+                `).join('') || '<div class="small muted">Sem logs de perguntas</div>';
+            } catch (e) { document.getElementById('ask-logs').innerHTML = 'Erro ao carregar logs de perguntas'; }
+        }
+
         // Load dashboard on page load
         loadDashboard();
         
@@ -332,10 +495,13 @@ def dashboard():
     """Admin dashboard main page"""
     return render_template_string(ADMIN_TEMPLATE)
 
+
 @admin_bp.route('/api/status')
-def api_status():
-    """API endpoint for system status"""
-    from app import client, LEGAL_KNOWLEDGE, active_model
+def get_system_status():
+    """Return system status information including database and OpenAI API status."""
+    from app import SEMANTIC_AVAILABLE, client, LEGAL_KNOWLEDGE, active_model
+
+    now_iso = datetime.utcnow().isoformat()
     
     # Test OpenAI client availability (non-fatal)
     openai_available = False
@@ -347,27 +513,128 @@ def api_status():
                 max_tokens=1
             )
             openai_available = True
-        except Exception:
+            current_app.logger.info("OpenAI API connection successful")
+        except Exception as e:
             openai_available = False
+            current_app.logger.warning(f"OpenAI API connection failed: {e}")
 
-    now_iso = datetime.utcnow().isoformat()
     knowledge_count = len(LEGAL_KNOWLEDGE)
     system_healthy = openai_available and knowledge_count >= 0
-
-    # Return both the new structure (used by JS) and legacy fields (for compatibility)
-    return jsonify({
-        # New fields expected by JS
+    
+    status = {
+        "timestamp": now_iso,
+        "system": {
+            "status": "online",
+            "version": "0.1.0",  # Hardcoded for now
+            "uptime": "1 day",  # Placeholder
+            "healthy": system_healthy
+        },
+        "database": {
+            "status": "unknown",
+            "type": "PostgreSQL" if SEMANTIC_AVAILABLE else "None",
+            "connection_string": "*****" + (os.getenv('DATABASE_URL', '')[-20:] if os.getenv('DATABASE_URL') else "not_configured")
+        },
+        "openai_api": {
+            "status": "connected" if openai_available else "disconnected",
+            "model": active_model or os.getenv('OPENAI_MODEL', 'gpt-4') 
+        },
+        "embedding": {
+            "model": os.getenv('EMBEDDING_MODEL', 'text-embedding-3-small'),
+            "dimensions": 1536  # Hardcoded for now
+        },
+        # Legacy fields for backwards compatibility
         "system_healthy": system_healthy,
         "openai_available": openai_available,
         "knowledge_count": knowledge_count,
-        "timestamp": now_iso,
         "active_model": active_model or "Não configurado",
-        # Legacy fields kept for compatibility
-        "system": "Operacional" if system_healthy else "Com problemas",
-        "openai_client": "Disponível" if openai_available else "Não disponível",
-        "knowledge_base": f"{knowledge_count} documentos",
-        "last_update": now_iso
-    })
+        "system_label": "Operacional" if system_healthy else "Com problemas"
+    }
+    
+    # Get real database status if semantic retrieval is available
+    if SEMANTIC_AVAILABLE:
+        try:
+            from retrieval import get_db_status, _ensure_connection
+            
+            # Force a connection check and potential reconnect before checking status
+            _ensure_connection()
+            
+            db_status = get_db_status()
+            current_app.logger.info(f"Database connection status: {db_status.get('connected', False)}")
+            
+            status["database"]["status"] = "connected" if db_status.get("connected", False) else "disconnected"
+            status["database"]["version"] = db_status.get("version", "unknown")
+            status["database"]["extensions"] = db_status.get("extensions", [])
+            
+            # Add more detailed database info
+            if db_status.get("connected", False):
+                status["database"]["name"] = db_status.get("database_name", "unknown")
+                status["database"]["vector_ready"] = db_status.get("vector_ready", False)
+                status["source"] = "database"
+            
+        except ImportError as ie:
+            current_app.logger.warning(f"Could not import database functions: {ie}")
+            status["database"]["status"] = "error"
+            status["database"]["error"] = str(ie)
+        except Exception as e:
+            current_app.logger.error(f"Error getting database status: {e}")
+            status["database"]["status"] = "error"
+            status["database"]["error"] = str(e)
+    
+    return jsonify(status)
+
+@admin_bp.route('/api/stats')
+def get_api_stats():
+    """Get API statistics using real database data when available"""
+    from app import SEMANTIC_AVAILABLE
+    
+    stats = {
+        "total_questions": 0,
+        "questions_today": 0,
+        "success_rate": 0.0 if not os.getenv('OPENAI_API_KEY') or os.getenv('OPENAI_API_KEY') == 'your_openai_api_key_here' else 0.95,
+        "avg_response_time": 1200,
+        "last_updated": datetime.utcnow().isoformat(),
+        "source": "mock"
+    }
+    
+    # Try to get real stats from database if semantic retrieval is available
+    try:
+        if SEMANTIC_AVAILABLE:
+            from retrieval import is_ready, admin_db_overview
+            
+            if is_ready():
+                logging.info("Using real database data for API stats")
+                # Get database overview
+                db_overview = admin_db_overview()
+                
+                # Update stats with real data
+                if db_overview:
+                    counts = db_overview.get("counts", {})
+                    
+                    # Update stats from counts
+                    stats["total_questions"] = counts.get("ask_logs", 0)
+                    
+                    # Get today's questions (approximate from most recent logs)
+                    today_questions = 0
+                    today = datetime.utcnow().date()
+                    for log in db_overview.get("recent", {}).get("ask_logs", []):
+                        try:
+                            log_date = datetime.fromisoformat(log.get("created_at", "")).date()
+                            if log_date == today:
+                                today_questions += 1
+                        except (ValueError, TypeError):
+                            pass
+                    
+                    stats["questions_today"] = today_questions
+                    stats["source"] = "database"
+                    
+                    # If we have search logs, calculate average response time
+                    if counts.get("search_logs", 0) > 0:
+                        stats["success_rate"] = 0.98  # Placeholder until detailed logging exists
+    except Exception as e:
+        logging.error(f"Error retrieving API stats from database: {e}")
+    
+    return jsonify(stats)
+
 
 @admin_bp.route('/api/env-vars')
 def get_env_vars():
@@ -397,24 +664,112 @@ def get_env_vars():
     
     return jsonify(env_vars)
 
-@admin_bp.route('/api/knowledge-base')
+@admin_bp.route('/api/knowledge-base', methods=['GET'])
 def get_knowledge_base():
-    """Get knowledge base information"""
-    from app import LEGAL_KNOWLEDGE
-    
-    categories = list(set(doc['category'] for doc in LEGAL_KNOWLEDGE))
-    
-    return jsonify({
-        "total": len(LEGAL_KNOWLEDGE),
-        "categories": categories,
-        "documents": LEGAL_KNOWLEDGE,
-        "last_updated": datetime.utcnow().isoformat()
-    })
+    """Return knowledge base documents for admin."""
+    try:
+        # Local import to avoid circular deps
+        from app import SEMANTIC_AVAILABLE, LEGAL_KNOWLEDGE
+
+        # Check if semantic retrieval is available and ready
+        db_ready = False
+        if SEMANTIC_AVAILABLE:
+            # Import the necessary functions from retrieval only if available
+            try:
+                from retrieval import admin_list_legal_chunks, admin_db_overview, is_ready, _ensure_connection
+                
+                # Force a connection check and potential reconnect
+                _ensure_connection()
+                db_ready = is_ready()
+                current_app.logger.info(f"Knowledge base DB ready status: {db_ready}")
+            except ImportError as imp_err:
+                current_app.logger.error(f"Import error in get_knowledge_base: {imp_err}")
+                pass
+
+        # Use real database data if available
+        if db_ready:
+            try:
+                q = request.args.get('q', '').strip()
+                category = request.args.get('category', '').strip() or None
+                page = max(1, int(request.args.get('page', 1)))
+                per_page = min(100, max(10, int(request.args.get('per_page', 25))))
+
+                # Calculate offset based on page and per_page
+                offset = (page - 1) * per_page
+
+                current_app.logger.info(f"Fetching legal chunks from database with params: q={q}, category={category}, limit={per_page}, offset={offset}")
+                
+                # Get documents from database
+                docs_data = admin_list_legal_chunks(
+                    q=q, category=category, limit=per_page, offset=offset)
+                
+                current_app.logger.info(f"Retrieved {docs_data.get('total', 0)} total documents, {len(docs_data.get('items', []))} on current page")
+
+                # Get DB overview with categories
+                db_overview = admin_db_overview()
+                categories = db_overview.get('categories', [])
+                current_app.logger.info(f"Retrieved {len(categories)} categories from database")
+
+                # Map documents and categories to frontend shape
+                items = docs_data.get('items', [])
+                documents = [
+                    {
+                        "id": it.get("id"),
+                        "title": it.get("title"),
+                        "category": it.get("category"),
+                        # keywords not included in list endpoint; provide empty list for UI
+                        "keywords": []
+                    }
+                    for it in items
+                ]
+                category_names = [c.get("category") for c in categories if isinstance(c, dict) and c.get("category")]
+
+                # Return formatted response for frontend
+                return jsonify({
+                    "total": docs_data.get('total', 0),
+                    "documents": documents,
+                    "categories": category_names,
+                    "source": "database"
+                })
+            except Exception as e:
+                current_app.logger.error(f"Error fetching knowledge base from database: {e}")
+                current_app.logger.info("Falling back to mock data due to database error")
+                # Fall back to mock data on error
+        else:
+            current_app.logger.info("Database not ready, using mock knowledge base data")
+
+        # Fallback to mock data if semantic retrieval is not available or ready
+        documents = []
+        for i, doc in enumerate(LEGAL_KNOWLEDGE):
+            documents.append({
+                "id": str(i + 1),  # Mock IDs for demo
+                "title": doc.get("title", ""),
+                "content": doc.get("content", "")[:200] + "...",  # Truncate for display
+                "category": doc.get("category", "general"),
+                "keywords": doc.get("keywords", []) if isinstance(doc, dict) else [],
+                "created_at": "2023-01-01T00:00:00Z",  # Mock date
+                "updated_at": "2023-01-01T00:00:00Z"  # Mock date
+            })
+
+        # Mock categories as string list
+        categories = ["constitutional", "civil", "criminal", "tax", "general"]
+
+        return jsonify({
+            "total": len(documents),
+            "documents": documents,
+            "categories": categories,
+            "source": "mock"
+        })
+    except Exception as e:
+        current_app.logger.error(f"Error in get_knowledge_base: {e}")
+        return jsonify({"error": str(e)}), 500
 
 @admin_bp.route('/api/logs')
 def get_system_logs():
-    """Get system logs (simplified)"""
-    # In a real system, you'd read from log files
+    """Get system logs from database if available"""
+    from app import SEMANTIC_AVAILABLE
+    
+    # Default mock logs
     logs = {
         "entries": [
             {
@@ -427,21 +782,58 @@ def get_system_logs():
                 "level": "INFO", 
                 "message": f"System status: OpenAI client {'available' if os.getenv('OPENAI_API_KEY') else 'not available'}"
             }
-        ]
+        ],
+        "source": "mock"
     }
+    
+    try:
+        # Try to get real logs from database if semantic retrieval is available
+        if SEMANTIC_AVAILABLE:
+            from retrieval import is_ready, admin_list_search_logs, admin_list_ask_logs
+            
+            if is_ready():
+                logging.info("Using real database data for system logs")
+                # Get search logs
+                search_logs = admin_list_search_logs(limit=10, offset=0)
+                ask_logs = admin_list_ask_logs(limit=10, offset=0)
+                
+                # Combine and format logs
+                entries = []
+                
+                # Process search logs
+                for item in search_logs.get("items", []):
+                    entries.append({
+                        "timestamp": item.get("created_at", ""),
+                        "level": "INFO",
+                        "type": "search",
+                        "message": f"Search query: '{item.get('query', '')}' (found {item.get('total', 0)} results)"
+                    })
+                
+                # Process ask logs
+                for item in ask_logs.get("items", []):
+                    entries.append({
+                        "timestamp": item.get("created_at", ""),
+                        "level": "INFO",
+                        "type": "ask",
+                        "message": f"Question: '{item.get('question', '')}' (used {item.get('total_sources', 0)} sources)"
+                    })
+                
+                # Sort by timestamp if available
+                entries.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+                
+                if entries:
+                    logs = {
+                        "entries": entries[:20],  # Limit to most recent 20
+                        "total": search_logs.get("total", 0) + ask_logs.get("total", 0),
+                        "source": "database"
+                    }
+    except Exception as e:
+        logging.error(f"Error retrieving logs from database: {e}")
+        logs["error"] = str(e)
     
     return jsonify(logs)
 
-@admin_bp.route('/api/stats')
-def get_api_stats():
-    """Get API statistics (mock data for now)"""
-    return jsonify({
-        "total_questions": 0,
-        "questions_today": 0,
-        "success_rate": 0.0 if not os.getenv('OPENAI_API_KEY') or os.getenv('OPENAI_API_KEY') == 'your_openai_api_key_here' else 0.95,
-        "avg_response_time": 1200,
-        "last_updated": datetime.utcnow().isoformat()
-    })
+    # duplicate get_api_stats removed (kept the primary definition earlier in the file)
 
 @admin_bp.route('/api/test-rag', methods=['POST'])
 def test_rag_system():

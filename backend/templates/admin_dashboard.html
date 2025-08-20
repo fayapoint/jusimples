@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JuSimples Admin - Command Center</title>
+    
+    <!-- CSS -->
+    <link rel="stylesheet" href="/static/admin/css/dashboard.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+    <!-- Sidebar -->
+    <aside id="sidebar" class="sidebar">
+        <div class="sidebar-header">
+            <div class="logo">
+                <i class="fas fa-gavel"></i>
+                <span>JuSimples</span>
+            </div>
+            <span class="version">v2.0</span>
+        </div>
+        
+        <nav class="sidebar-nav nav-menu">
+            <a href="#" class="nav-link active" data-page="dashboard">
+                <i class="fas fa-home"></i>
+                <span>Dashboard</span>
+            </a>
+            <a href="#" class="nav-link" data-page="knowledge">
+                <i class="fas fa-book"></i>
+                <span>Knowledge Base</span>
+            </a>
+            <a href="#" class="nav-link" data-page="training">
+                <i class="fas fa-graduation-cap"></i>
+                <span>Training</span>
+            </a>
+            <a href="#" class="nav-link" data-page="database">
+                <i class="fas fa-database"></i>
+                <span>Database</span>
+            </a>
+            <a href="#" class="nav-link" data-page="analytics">
+                <i class="fas fa-chart-line"></i>
+                <span>Analytics</span>
+            </a>
+            <a href="#" class="nav-link" data-page="llm">
+                <i class="fas fa-brain"></i>
+                <span>LLM Config</span>
+            </a>
+            <a href="#" class="nav-link" data-page="monitoring">
+                <i class="fas fa-heartbeat"></i>
+                <span>Monitoring</span>
+            </a>
+            <a href="#" class="nav-link" data-page="users">
+                <i class="fas fa-users"></i>
+                <span>Users</span>
+            </a>
+            <a href="#" class="nav-link" data-page="logs">
+                <i class="fas fa-file-alt"></i>
+                <span>Logs</span>
+            </a>
+            <a href="#" class="nav-link" data-page="settings">
+                <i class="fas fa-cog"></i>
+                <span>Settings</span>
+            </a>
+        </nav>
+        
+        <div class="sidebar-footer">
+            <div class="user-info">
+                <i class="fas fa-user-circle"></i>
+                <span>Admin</span>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <div class="main-content">
+        <!-- Top Bar -->
+        <header class="topbar">
+            <button id="mobile-menu-toggle" class="mobile-menu-toggle">
+                <i class="fas fa-bars"></i>
+            </button>
+            
+            <h1 id="page-title" class="page-title">
+                <i class="fas fa-home"></i>
+                <span>Dashboard Overview</span>
+            </h1>
+            
+            <div class="topbar-actions">
+                <button id="refresh-btn" class="topbar-btn" title="Refresh">
+                    <i class="fas fa-sync-alt"></i>
+                </button>
+                <button id="fullscreen-btn" class="topbar-btn" title="Fullscreen">
+                    <i class="fas fa-expand"></i>
+                </button>
+                <button id="notification-bell" class="topbar-btn" title="Notifications">
+                    <i class="fas fa-bell"></i>
+                    <span class="notification-dot"></span>
+                </button>
+            </div>
+        </header>
+        <div class="page-content">
+        <!-- Dashboard Page -->
+        <div id="dashboard-page" class="page active">
+            <div class="dashboard-grid">
+                <!-- Stats Cards Row -->
+                <div class="stats-row">
+                    <div class="stat-card">
+                        <div class="stat-icon bg-primary">
+                            <i class="fas fa-question-circle"></i>
+                        </div>
+                        <div class="stat-content">
+                            <div class="stat-value" id="total-queries">0</div>
+                            <div class="stat-label">Total Queries</div>
+                            <div class="stat-change positive">+12% from last week</div>
+                        </div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <div class="stat-icon bg-success">
+                            <i class="fas fa-users"></i>
+                        </div>
+                        <div class="stat-content">
+                            <div class="stat-value" id="active-users">0</div>
+                            <div class="stat-label">Active Users</div>
+                            <div class="stat-change positive">+5% from yesterday</div>
+                        </div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <div class="stat-icon bg-info">
+                            <i class="fas fa-file-alt"></i>
+                        </div>
+                        <div class="stat-content">
+                            <div class="stat-value" id="knowledge-docs">0</div>
+                            <div class="stat-label">Knowledge Docs</div>
+                            <div class="stat-change">No change</div>
+                        </div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <div class="stat-icon bg-warning">
+                            <i class="fas fa-tachometer-alt"></i>
+                        </div>
+                        <div class="stat-content">
+                            <div class="stat-value" id="response-time">0ms</div>
+                            <div class="stat-label">Avg Response</div>
+                            <div class="stat-change positive">-8% improvement</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Charts Row -->
+                <div class="charts-row">
+                    <div class="card chart-card">
+                        <div class="card-header">
+                            <h3 class="card-title">Query Volume (24h)</h3>
+                            <div class="card-actions">
+                                <button class="btn btn-sm btn-ghost">View All</button>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <canvas id="query-volume-chart"></canvas>
+                        </div>
+                    </div>
+                    
+                    <div class="card chart-card">
+                        <div class="card-header">
+                            <h3 class="card-title">Response Time Distribution</h3>
+                        </div>
+                        <div class="card-body">
+                            <canvas id="response-time-chart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Second Charts Row -->
+                <div class="charts-row">
+                    <div class="card chart-card">
+                        <div class="card-header">
+                            <h3 class="card-title">Query Categories</h3>
+                        </div>
+                        <div class="card-body">
+                            <canvas id="category-chart"></canvas>
+                        </div>
+                    </div>
+                    
+                    <div class="card chart-card">
+                        <div class="card-header">
+                            <h3 class="card-title">System Metrics</h3>
+                        </div>
+                        <div class="card-body">
+                            <canvas id="system-metrics-chart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Activity Feed & Quick Actions -->
+                <div class="bottom-row">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 class="card-title">Recent Activity</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="live-feed" id="activity-feed">
+                                <!-- Activity items will be loaded here -->
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 class="card-title">Quick Actions</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="quick-actions">
+                                <button class="btn btn-primary btn-block">
+                                    <i class="fas fa-plus"></i> Add Document
+                                </button>
+                                <button class="btn btn-secondary btn-block">
+                                    <i class="fas fa-sync"></i> Sync Database
+                                </button>
+                                <button class="btn btn-secondary btn-block">
+                                    <i class="fas fa-download"></i> Export Data
+                                </button>
+                                <button class="btn btn-secondary btn-block">
+                                    <i class="fas fa-shield-alt"></i> Security Scan
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Knowledge Base Page -->
+        <div id="knowledge-page" class="page">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">Knowledge Base Management</h3>
+                    <div class="card-actions">
+                        <button id="kb-reindex-btn" class="btn btn-secondary" title="Reindex Vector DB">
+                            <i class="fas fa-sync"></i> Reindex
+                        </button>
+                        <button id="kb-add-btn" class="btn btn-primary">
+                            <i class="fas fa-plus"></i> Add Document
+                        </button>
+                        <input id="kb-file-input" type="file" accept=".pdf,.txt,.md,.doc,.docx" style="display:none" />
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div id="knowledge-content">
+                        <!-- Knowledge base content will be loaded here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Training Page -->
+        <div id="training-page" class="page">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">Model Training & Fine-tuning</h3>
+                </div>
+                <div class="card-body">
+                    <div id="training-content">
+                        <!-- Training content will be loaded here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Database Page -->
+        <div id="database-page" class="page">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">Database Management</h3>
+                </div>
+                <div class="card-body">
+                    <div id="database-content">
+                        <!-- Database content will be loaded here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Analytics Page -->
+        <div id="analytics-page" class="page">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">Analytics & Reports</h3>
+                </div>
+                <div class="card-body">
+                    <div id="analytics-content">
+                        <!-- Analytics content will be loaded here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- LLM Config Page -->
+        <div id="llm-page" class="page">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">LLM Configuration</h3>
+                </div>
+                <div class="card-body">
+                    <div id="llm-content">
+                        <!-- LLM configuration content will be loaded here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Monitoring Page -->
+        <div id="monitoring-page" class="page">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">System Monitoring</h3>
+                </div>
+                <div class="card-body">
+                    <div id="monitoring-content">
+                        <!-- Monitoring content will be loaded here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Users Page -->
+        <div id="users-page" class="page">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">User Management</h3>
+                    <div class="card-actions">
+                        <button class="btn btn-primary">
+                            <i class="fas fa-user-plus"></i> Add User
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div id="users-content">
+                        <!-- Users content will be loaded here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Logs Page -->
+        <div id="logs-page" class="page">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">System Logs</h3>
+                    <div class="card-actions">
+                        <select class="form-select form-select-sm">
+                            <option>All Levels</option>
+                            <option>Error</option>
+                            <option>Warning</option>
+                            <option>Info</option>
+                            <option>Debug</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div id="logs-content" class="live-feed">
+                        <!-- Logs will be loaded here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Settings Page -->
+        <div id="settings-page" class="page">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">System Settings</h3>
+                </div>
+                <div class="card-body">
+                    <div id="settings-content">
+                        <!-- Settings content will be loaded here -->
+                    </div>
+                </div>
+            </div>
+        </div> <!-- /.page-content -->
+    </div> <!-- /.main-content -->
+    </div> <!-- /.app-container -->
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="/static/admin/js/dashboard.js"></script>
+</body>
+</html>

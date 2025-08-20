@@ -3,7 +3,7 @@ import sys
 import time
 import logging
 from datetime import datetime
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Tuple
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from openai import OpenAI
@@ -17,7 +17,40 @@ except ImportError:
     # dotenv not available, use environment variables directly
     pass
 
-from admin_dashboard import admin_bp
+# Import both old and new admin dashboards
+try:
+    from admin_dashboard_v2 import admin_bp_v2
+    ADMIN_V2_AVAILABLE = True
+except ImportError:
+    ADMIN_V2_AVAILABLE = False
+    from admin_dashboard import admin_bp
+
+try:
+    # Optional semantic retrieval (pgvector)
+    from retrieval import (
+        init_pgvector,
+        is_ready as semantic_is_ready,
+        seed_static_kb_from_list,
+        semantic_search,
+        get_doc_by_id,
+        log_search,
+        log_ask,
+        admin_db_overview,
+        admin_list_legal_chunks,
+        admin_list_search_logs,
+        admin_list_ask_logs,
+        update_legal_chunk,
+        delete_legal_chunk,
+    )
+    SEMANTIC_AVAILABLE = True
+except Exception as e:
+    SEMANTIC_AVAILABLE = False
+    # Logger not yet configured here; will log after logger is ready
+
+# Feature flag for semantic retrieval (default on)
+USE_SEMANTIC_RETRIEVAL = os.getenv('USE_SEMANTIC_RETRIEVAL', 'true').lower() == 'true'
+# Control whether to seed the semantic store on startup (default off to avoid embedding costs)
+SEED_SEMANTIC_ON_START = os.getenv('SEED_SEMANTIC_ON_START', 'false').lower() == 'true'
 
 # Configure logging for Railway compatibility
 logging.basicConfig(
@@ -32,10 +65,21 @@ logger.info("Initializing JuSimples backend...")
 logger.info(f"Python version: {sys.version}")
 logger.info(f"Working directory: {os.getcwd()}")
 
+if not SEMANTIC_AVAILABLE:
+    logger.info("Semantic retrieval module not available; running in keyword-only mode")
+else:
+    logger.info(f"Semantic retrieval module available. USE_SEMANTIC_RETRIEVAL={USE_SEMANTIC_RETRIEVAL}")
+
 app = Flask(__name__)
 
-# Register admin dashboard blueprint
-app.register_blueprint(admin_bp)
+# Register admin dashboard blueprint (v2 if available)
+if ADMIN_V2_AVAILABLE:
+    app.register_blueprint(admin_bp_v2)
+    logger.info("✅ Admin Dashboard v2.0 registered")
+else:
+    from admin_dashboard import admin_bp
+    app.register_blueprint(admin_bp)
+    logger.info("Admin Dashboard v1.0 registered (fallback)")
 
 # CORS configuration
 allowed_origins = os.getenv('CORS_ORIGINS', 'http://localhost:3000,https://jusimples.netlify.app,https://jusimplesbeta.netlify.app').split(',')
@@ -158,6 +202,20 @@ LEGAL_KNOWLEDGE = [
     }
 ]
 
+# Initialize pgvector (if enabled and available) and optionally seed static KB
+try:
+    if SEMANTIC_AVAILABLE and USE_SEMANTIC_RETRIEVAL:
+        if init_pgvector():
+            if SEED_SEMANTIC_ON_START:
+                seeded = seed_static_kb_from_list(LEGAL_KNOWLEDGE)
+                logger.info(f"Semantic store ready. Seeded chunks: {seeded}")
+            else:
+                logger.info("Semantic store ready. Seeding skipped (SEED_SEMANTIC_ON_START=false)")
+        else:
+            logger.info("Semantic store not ready (likely missing DATABASE_URL or pgvector). Fallback to keyword.")
+except Exception as e:
+    logger.warning(f"Semantic store initialization failed: {e}")
+
 def search_legal_knowledge(query: str) -> List[Dict]:
     """Simple keyword-based search in legal knowledge"""
     query_lower = query.lower()
@@ -179,6 +237,23 @@ def search_legal_knowledge(query: str) -> List[Dict]:
     # Sort by relevance
     results.sort(key=lambda x: x["relevance"], reverse=True)
     return results[:3]  # Return top 3 results
+
+
+def retrieve_context(query: str, top_k: int = 3) -> Tuple[List[Dict[str, Any]], str]:
+    """Retrieve context using semantic search if ready, otherwise keyword search.
+    Returns (results, search_type).
+    """
+    try:
+        if SEMANTIC_AVAILABLE and USE_SEMANTIC_RETRIEVAL and semantic_is_ready():
+            results = semantic_search(query, top_k=top_k)
+            # If semantic search yields no results (e.g., embedding error or empty table), fallback to keyword
+            if results:
+                return results, "semantic"
+            logger.info("Semantic search returned 0 results; falling back to keyword search")
+    except Exception as e:
+        logger.warning(f"Semantic retrieval failed, falling back to keyword: {e}")
+    # Fallback to keyword
+    return search_legal_knowledge(query), "keyword"
 
 def generate_ai_response(question, relevant_context):
     """Generate AI response using OpenAI with relevant legal context - VERSION 2.2.0"""
@@ -284,9 +359,22 @@ def health_check():
 
 @app.route('/api/ask', methods=['POST'])
 def ask_question():
+    start_time = time.time()
     try:
         data = request.get_json()
         question = data.get('question', '').strip()
+        # Optional tuning params
+        top_k_raw = data.get('top_k', 3)
+        min_rel_raw = data.get('min_relevance', 0.5)
+        try:
+            top_k = int(top_k_raw)
+        except Exception:
+            top_k = 3
+        top_k = max(1, min(10, top_k))
+        try:
+            min_relevance = float(min_rel_raw)
+        except Exception:
+            min_relevance = 0.5
         
         logger.info(f"Received question request: {question[:100] if question else 'No question provided'}")
         logger.info(f"OpenAI client status: {'Available' if client else 'Not available'}")
@@ -301,19 +389,97 @@ def ask_question():
         
         logger.info(f"Processing question: {question[:100]}...")
         
-        # Search relevant legal knowledge
-        relevant_context = search_legal_knowledge(question)
-        logger.info(f"Found {len(relevant_context)} relevant documents")
+        # Search relevant legal knowledge (semantic preferred)
+        relevant_context, search_type = retrieve_context(question, top_k=top_k)
+        # Apply relevance filtering only for semantic results
+        if search_type == "semantic":
+            relevant_context = [it for it in relevant_context if float(it.get("relevance", 0.0)) >= min_relevance]
+        logger.info(f"Found {len(relevant_context)} relevant documents via {search_type}")
         
         # Generate AI response
         ai_answer = generate_ai_response(question, relevant_context)
         logger.info(f"Generated AI response: {ai_answer[:100]}...")
+
+        # Log ask analytics (enhanced with detailed tracking)
+        try:
+            result_ids = [str(item.get("id")) for item in relevant_context if item.get("id")]
+            session_id = request.headers.get('X-Session-ID') or f"web_{int(time.time())}"
+            user_id = request.headers.get('X-User-ID')
+            
+            # Calculate actual response time
+            processing_time = time.time() - start_time
+            
+            # Extract comprehensive OpenAI API response data
+            tokens_used = 0
+            input_tokens = 0  
+            output_tokens = 0
+            llm_cost = 0.0
+            finish_reason = None
+            system_fingerprint = None
+            
+            # Get actual usage data from OpenAI response if available
+            if hasattr(response, 'usage') and response.usage:
+                tokens_used = response.usage.total_tokens
+                input_tokens = response.usage.prompt_tokens  
+                output_tokens = response.usage.completion_tokens
+                
+                # Calculate actual cost for gpt-4o-mini
+                llm_cost = (input_tokens * 0.00015 / 1000) + (output_tokens * 0.0006 / 1000)
+            
+            # Get additional OpenAI metadata
+            if hasattr(response, 'choices') and response.choices:
+                finish_reason = response.choices[0].finish_reason
+            if hasattr(response, 'system_fingerprint'):
+                system_fingerprint = response.system_fingerprint
+                
+            # Fallback estimation if no usage data
+            if tokens_used == 0 and client and ai_answer and "Erro" not in ai_answer:
+                tokens_used = len(ai_answer) // 4 + len(question) // 4
+                input_tokens = len(question) // 4
+                output_tokens = len(ai_answer) // 4
+                llm_cost = (input_tokens * 0.00015 / 1000) + (output_tokens * 0.0006 / 1000)
+            
+            if SEMANTIC_AVAILABLE:
+                try:
+                    from retrieval_extensions import log_ask_advanced
+                    from retrieval import _CONN
+                    log_ask_advanced(
+                        question=question,
+                        answer=ai_answer,
+                        top_k=top_k,
+                        min_relevance=min_relevance,
+                        result_ids=result_ids,
+                        search_type=search_type,
+                        success="Erro" not in ai_answer,
+                        session_id=session_id,
+                        user_id=user_id,
+                        response_time_ms=int(processing_time * 1000) if processing_time else 0,
+                        llm_model=active_model,
+                        llm_tokens_used=tokens_used,
+                        llm_cost=llm_cost,
+                        user_agent=request.headers.get('User-Agent', ''),
+                        ip_address=request.environ.get('HTTP_X_FORWARDED_FOR', request.environ.get('REMOTE_ADDR')),
+                        context_found=len(relevant_context),
+                        input_tokens=input_tokens,
+                        output_tokens=output_tokens,
+                        finish_reason=finish_reason,
+                        system_fingerprint=system_fingerprint,
+                        conn=_CONN
+                    )
+                except ImportError:
+                    # Fallback to basic logging
+                    from retrieval import log_ask
+                    log_ask(question, top_k, min_relevance, result_ids)
+                logger.info(f"✅ Logged ask analytics: tokens={tokens_used}, cost=${llm_cost:.4f}, search_type={search_type}")
+        except Exception as _e:
+            logger.error(f"Failed to log ask analytics: {_e}", exc_info=True)
         
         response = {
             "question": question,
             "answer": ai_answer,
             "sources": [
                 {
+                    "id": item.get("id"),
                     "title": item["title"],
                     "category": item["category"],
                     "content_preview": item["content"][:200] + "...",
@@ -325,7 +491,8 @@ def ask_question():
             "timestamp": datetime.utcnow().isoformat(),
             "system_status": {
                 "openai_available": client is not None,
-                "knowledge_base_size": len(relevant_context)
+                "knowledge_base_size": len(relevant_context),
+                "search_type": search_type
             },
             "disclaimer": "Esta resposta é baseada em IA e tem caráter informativo. Para casos complexos, consulte um advogado especializado.",
             "debug_info": {
@@ -333,7 +500,8 @@ def ask_question():
                 "active_model": active_model,
                 "context_found": len(relevant_context),
                 "api_key_configured": openai_api_key is not None and openai_api_key != 'your_openai_api_key_here'
-            }
+            },
+            "params": {"top_k": top_k, "min_relevance": min_relevance}
         }
         
         logger.info("Successfully processed question and returning response")
@@ -354,18 +522,70 @@ def ask_question():
 def search_legal():
     try:
         data = request.get_json()
-        query = data.get('query', '').lower().strip()
+        raw_query = data.get('query', '').strip()
+        query_lower = raw_query.lower()
+        # Optional tuning params
+        top_k_raw = data.get('top_k', 3)
+        min_rel_raw = data.get('min_relevance', 0.0)
+        try:
+            top_k = int(top_k_raw)
+        except Exception:
+            top_k = 3
+        top_k = max(1, min(10, top_k))
+        try:
+            min_relevance = float(min_rel_raw)
+        except Exception:
+            min_relevance = 0.0
         
-        if not query:
+        if not raw_query:
             return jsonify({"error": "Query não fornecida"}), 400
         
-        # Search legal knowledge
-        results = search_legal_knowledge(query)
+        # Search legal knowledge (semantic preferred)
+        results, search_type = retrieve_context(raw_query, top_k=top_k)
+        if search_type == "semantic":
+            results = [it for it in results if float(it.get("relevance", 0.0)) >= min_relevance]
+        # For keyword-only, ensure we reflect the lowercased query used
+        query_for_return = raw_query if search_type == "semantic" else query_lower
+        
+        # Log search analytics (enhanced with detailed tracking)
+        try:
+            result_ids = [str(item.get("id")) for item in results if item.get("id")]
+            session_id = request.headers.get('X-Session-ID') or f"web_{int(time.time())}"
+            user_id = request.headers.get('X-User-ID')
+            processing_time = time.time() - time.time()  # Will add start_time
+            
+            if SEMANTIC_AVAILABLE:
+                try:
+                    from retrieval_extensions import log_search_advanced
+                    from retrieval import _CONN
+                    log_search_advanced(
+                        query=raw_query,
+                        top_k=top_k,
+                        min_relevance=min_relevance,
+                        result_ids=result_ids,
+                        search_type=search_type,
+                        success=len(results) > 0,
+                        session_id=session_id,
+                        user_id=user_id,
+                        response_time_ms=int(processing_time * 1000) if processing_time else 0,
+                        user_agent=request.headers.get('User-Agent', ''),
+                        ip_address=request.environ.get('HTTP_X_FORWARDED_FOR', request.environ.get('REMOTE_ADDR')),
+                        context_found=len(results),
+                        conn=_CONN
+                    )
+                except ImportError:
+                    # Fallback to basic logging
+                    from retrieval import log_search
+                    log_search(raw_query, top_k, min_relevance, search_type, result_ids)
+                logger.info(f"✅ Logged search analytics: query={raw_query[:50]}..., results={len(results)}, search_type={search_type}")
+        except Exception as _e:
+            logger.error(f"Failed to log search analytics: {_e}", exc_info=True)
         
         return jsonify({
-            "query": query,
+            "query": query_for_return,
             "results": [
                 {
+                    "id": item.get("id"),
                     "title": item["title"],
                     "content": item["content"],
                     "category": item["category"],
@@ -374,7 +594,8 @@ def search_legal():
                 for item in results
             ],
             "total": len(results),
-            "search_type": "keyword"
+            "search_type": search_type,
+            "params": {"top_k": top_k, "min_relevance": min_relevance}
         })
             
     except Exception as e:
@@ -485,6 +706,40 @@ def get_legal_data():
         "last_updated": datetime.utcnow().isoformat()
     })
 
+@app.route('/api/documentos', methods=['GET'])
+@app.route('/api/documentos/<doc_id>', methods=['GET'])
+def get_document_by_id(doc_id=None):
+    """Fetch a single legal document by id from semantic store (if available)."""
+    try:
+        _id = doc_id or request.args.get('id') or request.args.get('doc_id') or request.args.get('source')
+        if not _id:
+            return jsonify({"error": "Parâmetro 'id' não fornecido"}), 400
+        # Only available when semantic store is ready
+        doc = None
+        try:
+            if SEMANTIC_AVAILABLE and USE_SEMANTIC_RETRIEVAL and semantic_is_ready():
+                doc = get_doc_by_id(_id)
+        except Exception as e:
+            logger.warning(f"get_doc_by_id failed: {e}")
+            doc = None
+        if not doc:
+            return jsonify({"error": "Documento não encontrado"}), 404
+        md = doc.get("metadata") or {}
+        return jsonify({
+            "id": doc.get("id"),
+            "title": doc.get("title"),
+            "category": doc.get("category"),
+            "content": doc.get("content"),
+            "metadata": md,
+            "source_url": md.get("source_url"),
+            "source_type": md.get("source_type"),
+            "published_at": md.get("published_at"),
+            "jurisdiction": md.get("jurisdiction"),
+        })
+    except Exception as e:
+        logger.error(f"Error in get_document_by_id: {e}")
+        return jsonify({"error": "Erro ao buscar documento"}), 500
+
 @app.route('/api/news')
 def get_news():
     """Return a small curated list of legal-related news (mock data)."""
@@ -518,7 +773,8 @@ def get_news():
             "thumbnail": "https://placehold.co/176x120/111111/FFFFFF?text=IA+no+Jud"
         },
     ]
-    return jsonify({"news": news, "updated_at": datetime.utcnow().isoformat()})
+
+ 
 
 @app.route('/api/ads')
 def get_ads():
@@ -545,6 +801,120 @@ def get_ads():
     ]
     return jsonify({"ads": ads, "updated_at": datetime.utcnow().isoformat()})
 
+@app.route('/api/admin/db/overview', methods=['GET'])
+def api_admin_db_overview():
+    """Return high-level DB overview for admin dashboard."""
+    if not SEMANTIC_AVAILABLE:
+        return jsonify({"ready": False, "message": "Semantic store not available"})
+    try:
+        data = admin_db_overview()
+        return jsonify(data)
+    except Exception as e:
+        logger.error(f"admin_db_overview endpoint error: {e}")
+        return jsonify({"error": "Failed to fetch DB overview"}), 500
+
+
+@app.route('/api/admin/legal-chunks', methods=['GET'])
+def api_admin_list_legal_chunks():
+    """List legal documents with optional filters and pagination."""
+    if not SEMANTIC_AVAILABLE:
+        return jsonify({"total": 0, "items": []})
+    try:
+        q = (request.args.get('q') or '').strip()
+        category = request.args.get('category')
+        try:
+            limit = int(request.args.get('limit', 50))
+        except Exception:
+            limit = 50
+        try:
+            offset = int(request.args.get('offset', 0))
+        except Exception:
+            offset = 0
+        limit = max(1, min(200, limit))
+        offset = max(0, offset)
+        data = admin_list_legal_chunks(q=q, category=category, limit=limit, offset=offset)
+        return jsonify(data)
+    except Exception as e:
+        logger.error(f"admin_list_legal_chunks endpoint error: {e}")
+        return jsonify({"error": "Failed to list documents"}), 500
+
+
+@app.route('/api/admin/logs/search', methods=['GET'])
+def api_admin_list_search_logs():
+    if not SEMANTIC_AVAILABLE:
+        return jsonify({"total": 0, "items": []})
+    try:
+        try:
+            limit = int(request.args.get('limit', 50))
+        except Exception:
+            limit = 50
+        try:
+            offset = int(request.args.get('offset', 0))
+        except Exception:
+            offset = 0
+        limit = max(1, min(200, limit))
+        offset = max(0, offset)
+        data = admin_list_search_logs(limit=limit, offset=offset)
+        return jsonify(data)
+    except Exception as e:
+        logger.error(f"admin_list_search_logs endpoint error: {e}")
+        return jsonify({"error": "Failed to list search logs"}), 500
+
+
+@app.route('/api/admin/logs/ask', methods=['GET'])
+def api_admin_list_ask_logs():
+    if not SEMANTIC_AVAILABLE:
+        return jsonify({"total": 0, "items": []})
+    try:
+        try:
+            limit = int(request.args.get('limit', 50))
+        except Exception:
+            limit = 50
+        try:
+            offset = int(request.args.get('offset', 0))
+        except Exception:
+            offset = 0
+        limit = max(1, min(200, limit))
+        offset = max(0, offset)
+        data = admin_list_ask_logs(limit=limit, offset=offset)
+        return jsonify(data)
+    except Exception as e:
+        logger.error(f"admin_list_ask_logs endpoint error: {e}")
+        return jsonify({"error": "Failed to list ask logs"}), 500
+
+
+@app.route('/api/admin/legal-chunks/<doc_id>', methods=['PATCH'])
+def api_admin_update_legal_chunk(doc_id: str):
+    if not SEMANTIC_AVAILABLE:
+        return jsonify({"success": False, "error": "Semantic store not available"}), 400
+    try:
+        data = request.get_json(silent=True) or {}
+        title = data.get('title') if 'title' in data else None
+        content = data.get('content') if 'content' in data else None
+        category = data.get('category') if 'category' in data else None
+        metadata = data.get('metadata') if 'metadata' in data else None
+        ok = update_legal_chunk(doc_id, title=title, content=content, category=category, metadata=metadata)
+        if ok:
+            return jsonify({"success": True, "id": doc_id})
+        return jsonify({"success": False, "error": "Update failed"}), 400
+    except Exception as e:
+        logger.error(f"update_legal_chunk endpoint error: {e}")
+        return jsonify({"success": False, "error": "Failed to update document"}), 500
+
+
+@app.route('/api/admin/legal-chunks/<doc_id>', methods=['DELETE'])
+def api_admin_delete_legal_chunk(doc_id: str):
+    if not SEMANTIC_AVAILABLE:
+        return jsonify({"success": False, "error": "Semantic store not available"}), 400
+    try:
+        ok = delete_legal_chunk(doc_id)
+        if ok:
+            return jsonify({"success": True, "id": doc_id})
+        return jsonify({"success": False, "error": "Delete failed"}), 400
+    except Exception as e:
+        logger.error(f"delete_legal_chunk endpoint error: {e}")
+        return jsonify({"success": False, "error": "Failed to delete document"}), 500
+
 @app.errorhandler(404)
 def not_found(error):
     return jsonify({"error": "Endpoint não encontrado"}), 404
@@ -553,10 +923,36 @@ def not_found(error):
 def internal_error(error):
     return jsonify({"error": "Erro interno do servidor"}), 500
 
+
+def check_db_connection():
+    """Diagnostic function to check database connection status"""
+    logger.info("========== DATABASE DIAGNOSTIC INFO ===========")
+    logger.info(f"DATABASE_URL set: {bool(os.getenv('DATABASE_URL'))}")
+    logger.info(f"DATABASE_URL length: {len(os.getenv('DATABASE_URL', ''))}")
+    logger.info(f"SEMANTIC_AVAILABLE: {SEMANTIC_AVAILABLE}")
+    logger.info(f"USE_SEMANTIC_RETRIEVAL: {USE_SEMANTIC_RETRIEVAL}")
+    
+    if SEMANTIC_AVAILABLE:
+        is_db_ready = semantic_is_ready()
+        logger.info(f"Database ready status: {is_db_ready}")
+        
+        if not is_db_ready:
+            logger.warning("Database not ready, attempting to initialize again...")
+            init_result = init_pgvector()
+            logger.info(f"Re-initialization result: {init_result}")
+    else:
+        logger.error("SEMANTIC_AVAILABLE is False - semantic retrieval disabled")
+    
+    logger.info("=============================================")
+
+
 if __name__ == '__main__':
     try:
         # Initialize OpenAI client on startup
         initialize_openai_client()
+        
+        # Run diagnostic check
+        check_db_connection()
         
         # Run Flask app
         port = int(os.getenv('PORT', 5000))
