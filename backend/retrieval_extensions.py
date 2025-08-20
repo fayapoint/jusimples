@@ -9,34 +9,47 @@ from psycopg.types.json import Json
 LOGGER = logging.getLogger(__name__)
 
 def log_ask_advanced(question: str, answer: str, top_k: int, min_relevance: float, 
-                    result_ids: List[str], search_type: str, success: bool,
+                    result_ids: List[str], search_type: str, success: bool, 
                     session_id: str = None, user_id: str = None, response_time_ms: int = 0,
                     llm_model: str = None, llm_tokens_used: int = 0, llm_cost: float = 0.0,
                     user_agent: str = None, ip_address: str = None, context_found: int = 0,
                     input_tokens: int = 0, output_tokens: int = 0, finish_reason: str = None,
-                    system_fingerprint: str = None, conn=None) -> bool:
-    """Enhanced ask logging with comprehensive analytics"""
+                    system_fingerprint: str = None, response_id: str = None, 
+                    created_timestamp: int = None, logprobs: str = None, conn=None) -> bool:
+    """Enhanced ask logging with comprehensive OpenAI analytics"""
     if not conn:
         return False
     try:
         with conn.cursor() as cur:
+            # First ensure all columns exist
+            try:
+                cur.execute("""
+                    ALTER TABLE ask_logs ADD COLUMN IF NOT EXISTS response_id VARCHAR(255);
+                    ALTER TABLE ask_logs ADD COLUMN IF NOT EXISTS created_timestamp INTEGER;
+                    ALTER TABLE ask_logs ADD COLUMN IF NOT EXISTS logprobs TEXT;
+                """)
+            except Exception as schema_e:
+                LOGGER.warning(f"Schema update failed (may already exist): {schema_e}")
+            
             # Insert into ask_logs with comprehensive OpenAI analytics
             cur.execute("""
                 INSERT INTO ask_logs (
                     question, answer, top_k, min_relevance, result_ids, search_type, 
                     success, session_id, user_id, response_time_ms, llm_model, 
                     llm_tokens_used, llm_cost, user_agent, ip_address, context_found,
-                    input_tokens, output_tokens, finish_reason, system_fingerprint
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    input_tokens, output_tokens, finish_reason, system_fingerprint,
+                    response_id, created_timestamp, logprobs
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """, (
                 question, answer, top_k, min_relevance, Json(result_ids), search_type,
                 success, session_id, user_id, response_time_ms, llm_model,
                 llm_tokens_used, llm_cost, user_agent, ip_address, context_found,
-                input_tokens, output_tokens, finish_reason, system_fingerprint
+                input_tokens, output_tokens, finish_reason, system_fingerprint,
+                response_id, created_timestamp, logprobs
             ))
         conn.commit()
         
-        LOGGER.info(f"✅ Advanced ask logged: question={question[:50]}..., tokens={llm_tokens_used}, cost=${llm_cost:.4f}")
+        LOGGER.info(f"✅ Advanced ask logged: question={question[:50]}..., tokens={llm_tokens_used}, cost=${llm_cost:.4f}, model={llm_model}")
         return True
     except Exception as e:
         LOGGER.error(f"Failed to log advanced ask: {e}")

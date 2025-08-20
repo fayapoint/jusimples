@@ -19,6 +19,10 @@ export default function Home() {
   const [recentSearches, setRecentSearches] = useState([]);
   const [topSearches, setTopSearches] = useState([]);
   const [globalPopularSearches, setGlobalPopularSearches] = useState([]);
+  const [sortOption, setSortOption] = useState('frequency'); // frequency, recent, alphabetical
+  const [filterCategory, setFilterCategory] = useState('all'); // all, trabalhista, civil, consumidor
+  const [hoveredItem, setHoveredItem] = useState(null);
+  const hoverTimeoutRef = useRef(null);
   const inputRef = useRef(null);
 
   // Search history helpers
@@ -118,6 +122,92 @@ export default function Home() {
 
     return () => clearInterval(phraseInterval.current);
   }, []);
+
+  // Categorize search terms
+  const categorizeSearch = (term) => {
+    const lowerTerm = term.toLowerCase();
+    if (lowerTerm.includes('trabalh') || lowerTerm.includes('emprego') || lowerTerm.includes('rescisão') || 
+        lowerTerm.includes('férias') || lowerTerm.includes('salário') || lowerTerm.includes('horas extras')) {
+      return 'trabalhista';
+    }
+    if (lowerTerm.includes('consumidor') || lowerTerm.includes('produto') || lowerTerm.includes('serviço') || 
+        lowerTerm.includes('compra') || lowerTerm.includes('defeito')) {
+      return 'consumidor';
+    }
+    if (lowerTerm.includes('civil') || lowerTerm.includes('contrato') || lowerTerm.includes('danos morais') || 
+        lowerTerm.includes('família') || lowerTerm.includes('divórcio')) {
+      return 'civil';
+    }
+    if (lowerTerm.includes('aposentadoria') || lowerTerm.includes('pensão') || lowerTerm.includes('inss') || 
+        lowerTerm.includes('previdência')) {
+      return 'previdenciario';
+    }
+    return 'geral';
+  };
+
+  // Sort and filter searches
+  // Handle hover with delays to prevent jittery expansion
+  const handleItemHover = (itemKey) => {
+    // Clear any existing timeout
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current);
+    }
+    
+    // Set new timeout for hover
+    hoverTimeoutRef.current = setTimeout(() => {
+      setHoveredItem(itemKey);
+    }, 800); // 800ms delay before showing actions
+  };
+
+  const handleItemLeave = () => {
+    // Clear timeout and hide immediately
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current);
+    }
+    setHoveredItem(null);
+  };
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (hoverTimeoutRef.current) {
+        clearTimeout(hoverTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const sortAndFilterSearches = (searches, isLocal = false) => {
+    let filtered = searches;
+    
+    // Apply category filter
+    if (filterCategory !== 'all') {
+      filtered = searches.filter(search => {
+        const term = isLocal ? search.term || search : search;
+        return categorizeSearch(term) === filterCategory;
+      });
+    }
+    
+    // Apply sorting
+    filtered.sort((a, b) => {
+      const termA = isLocal ? (a.term || a) : a;
+      const termB = isLocal ? (b.term || b) : b;
+      const countA = isLocal ? (a.count || 0) : 0;
+      const countB = isLocal ? (b.count || 0) : 0;
+      
+      switch (sortOption) {
+        case 'alphabetical':
+          return termA.localeCompare(termB);
+        case 'recent':
+          // For global searches, we don't have timestamps, so keep original order
+          return isLocal ? (countB - countA) : 0;
+        case 'frequency':
+        default:
+          return countB - countA;
+      }
+    });
+    
+    return filtered;
+  };
 
   // Fetch global popular searches from database (real user searches only)
   const fetchGlobalPopularSearches = async () => {
@@ -247,44 +337,152 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Search Trends Section */}
-        <div className="search-trends">
+        {/* Enhanced Search Trends Section */}
+        <div className="search-trends-enhanced">
           <div className="trend-panel">
             <div className="trend-header">
               <span className="trend-title">Buscas recentes</span>
+              <span className="trend-subtitle">Suas consultas anteriores</span>
             </div>
             <div className="trend-list">
               {recentSearches.length > 0 ? (
                 recentSearches.map((t, idx) => (
-                  <button key={idx} className="trend-chip" onClick={() => handleChipClick(t)}>
-                    {t}
-                  </button>
+                  <div key={idx} className="trend-item-enhanced">
+                    <button 
+                      className="trend-chip-enhanced recent" 
+                      onClick={() => handleChipClick(t)}
+                      title="Clique para buscar novamente"
+                    >
+                      <span className="chip-text">{t}</span>
+                      <span className="chip-action">🔍</span>
+                    </button>
+                  </div>
                 ))
               ) : (
-                <span className="trend-empty">Nenhuma busca recente</span>
+                <div className="trend-empty-state">
+                  <span className="empty-icon">📝</span>
+                  <span className="empty-text">Nenhuma busca recente</span>
+                </div>
               )}
             </div>
           </div>
 
-          <div className="trend-panel">
+          <div className="trend-panel popular">
             <div className="trend-header">
               <span className="trend-title">Mais buscadas</span>
+              <span className="trend-subtitle">Consultas populares da comunidade</span>
+              <div className="trend-controls">
+                <select 
+                  className="sort-select"
+                  value={sortOption}
+                  onChange={(e) => setSortOption(e.target.value)}
+                >
+                  <option value="frequency">Por frequência</option>
+                  <option value="recent">Mais recentes</option>
+                  <option value="alphabetical">A-Z</option>
+                </select>
+                <select
+                  className="filter-select"
+                  value={filterCategory}
+                  onChange={(e) => setFilterCategory(e.target.value)}
+                >
+                  <option value="all">Todas as áreas</option>
+                  <option value="trabalhista">Direito Trabalhista</option>
+                  <option value="civil">Direito Civil</option>
+                  <option value="consumidor">Direito do Consumidor</option>
+                  <option value="previdenciario">Direito Previdenciário</option>
+                </select>
+              </div>
             </div>
             <div className="trend-list">
               {topSearches.length > 0 ? (
-                topSearches.map(({ term, count }, idx) => (
-                  <button key={idx} className="trend-chip" title={`${count} vezes`} onClick={() => handleChipClick(term)}>
-                    {term}
-                  </button>
-                ))
+                sortAndFilterSearches(topSearches, true).map(({ term, count }, idx) => {
+                  const itemKey = `local-${idx}`;
+                  return (
+                    <div 
+                      key={idx} 
+                      className="trend-item-enhanced"
+                      onMouseEnter={() => handleItemHover(itemKey)}
+                      onMouseLeave={handleItemLeave}
+                    >
+                      <button 
+                        className={`trend-chip-enhanced popular ${categorizeSearch(term)}`}
+                        onClick={() => handleChipClick(term)}
+                        title={`Buscado ${count} vezes - Clique para pesquisar`}
+                      >
+                        <span className="chip-text">{term}</span>
+                        <div className="chip-metadata">
+                          <span className="chip-count">{count}x</span>
+                          <span className="chip-category">{categorizeSearch(term)}</span>
+                          <span className="chip-action">🔍</span>
+                        </div>
+                      </button>
+                      <div className={`trend-actions ${hoveredItem === itemKey ? 'show' : ''}`}>
+                        <button 
+                          className="action-btn explore"
+                          onClick={() => handleChipClick(`mais informações sobre ${term}`)}
+                          title="Explorar mais detalhes"
+                        >
+                          📊 Explorar
+                        </button>
+                        <button 
+                          className="action-btn related"
+                          onClick={() => handleChipClick(`questões relacionadas a ${term}`)}
+                          title="Ver temas relacionados"
+                        >
+                          🔗 Relacionados
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
               ) : globalPopularSearches.length > 0 ? (
-                globalPopularSearches.map((term, idx) => (
-                  <button key={idx} className="trend-chip" onClick={() => handleChipClick(term)}>
-                    {term}
-                  </button>
-                ))
+                sortAndFilterSearches(globalPopularSearches, false).map((term, idx) => {
+                  const itemKey = `global-${idx}`;
+                  return (
+                    <div 
+                      key={idx} 
+                      className="trend-item-enhanced"
+                      onMouseEnter={() => handleItemHover(itemKey)}
+                      onMouseLeave={handleItemLeave}
+                    >
+                      <button 
+                        className={`trend-chip-enhanced global ${categorizeSearch(term)}`}
+                        onClick={() => handleChipClick(term)}
+                        title="Clique para pesquisar"
+                      >
+                        <span className="chip-text">{term}</span>
+                        <div className="chip-metadata">
+                          <span className="chip-badge">Popular</span>
+                          <span className="chip-category">{categorizeSearch(term)}</span>
+                          <span className="chip-action">🔍</span>
+                        </div>
+                      </button>
+                      <div className={`trend-actions ${hoveredItem === itemKey ? 'show' : ''}`}>
+                        <button 
+                          className="action-btn explore"
+                          onClick={() => handleChipClick(`mais informações sobre ${term}`)}
+                          title="Explorar mais detalhes"
+                        >
+                          📊 Explorar
+                        </button>
+                        <button 
+                          className="action-btn related"
+                          onClick={() => handleChipClick(`questões relacionadas a ${term}`)}
+                          title="Ver temas relacionados"
+                        >
+                          🔗 Relacionados
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
               ) : (
-                <span className="trend-empty">Aguardando buscas</span>
+                <div className="trend-empty-state">
+                  <span className="empty-icon">⏳</span>
+                  <span className="empty-text">Aguardando buscas</span>
+                  <span className="empty-subtitle">As consultas mais populares aparecerão aqui</span>
+                </div>
               )}
             </div>
           </div>

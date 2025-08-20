@@ -416,6 +416,10 @@ def ask_question():
             llm_cost = 0.0
             finish_reason = None
             system_fingerprint = None
+            response_id = None
+            model_used = None
+            created_timestamp = None
+            logprobs = None
             
             # Get actual usage data from OpenAI response if available
             if hasattr(response, 'usage') and response.usage:
@@ -423,14 +427,36 @@ def ask_question():
                 input_tokens = response.usage.prompt_tokens  
                 output_tokens = response.usage.completion_tokens
                 
-                # Calculate actual cost for gpt-4o-mini
-                llm_cost = (input_tokens * 0.00015 / 1000) + (output_tokens * 0.0006 / 1000)
+                # Calculate actual cost based on model
+                model_for_cost = active_model or 'gpt-4o-mini'
+                if 'gpt-4o-mini' in model_for_cost.lower():
+                    llm_cost = (input_tokens * 0.00015 / 1000) + (output_tokens * 0.0006 / 1000)
+                elif 'gpt-4o' in model_for_cost.lower():
+                    llm_cost = (input_tokens * 0.005 / 1000) + (output_tokens * 0.015 / 1000)
+                elif 'gpt-4' in model_for_cost.lower():
+                    llm_cost = (input_tokens * 0.03 / 1000) + (output_tokens * 0.06 / 1000)
+                else:
+                    # Default to gpt-4o-mini pricing
+                    llm_cost = (input_tokens * 0.00015 / 1000) + (output_tokens * 0.0006 / 1000)
             
-            # Get additional OpenAI metadata
+            # Extract all available OpenAI response metadata
             if hasattr(response, 'choices') and response.choices:
-                finish_reason = response.choices[0].finish_reason
+                choice = response.choices[0]
+                finish_reason = choice.finish_reason
+                if hasattr(choice, 'logprobs') and choice.logprobs:
+                    logprobs = str(choice.logprobs)[:500]  # Truncate if too long
+            
             if hasattr(response, 'system_fingerprint'):
                 system_fingerprint = response.system_fingerprint
+                
+            if hasattr(response, 'id'):
+                response_id = response.id
+                
+            if hasattr(response, 'model'):
+                model_used = response.model
+                
+            if hasattr(response, 'created'):
+                created_timestamp = response.created
                 
             # Fallback estimation if no usage data
             if tokens_used == 0 and client and ai_answer and "Erro" not in ai_answer:
@@ -454,7 +480,7 @@ def ask_question():
                         session_id=session_id,
                         user_id=user_id,
                         response_time_ms=int(processing_time * 1000) if processing_time else 0,
-                        llm_model=active_model,
+                        llm_model=model_used or active_model,
                         llm_tokens_used=tokens_used,
                         llm_cost=llm_cost,
                         user_agent=request.headers.get('User-Agent', ''),
@@ -464,6 +490,9 @@ def ask_question():
                         output_tokens=output_tokens,
                         finish_reason=finish_reason,
                         system_fingerprint=system_fingerprint,
+                        response_id=response_id,
+                        created_timestamp=created_timestamp,
+                        logprobs=logprobs,
                         conn=_CONN
                     )
                 except ImportError:
@@ -520,6 +549,7 @@ def ask_question():
 
 @app.route('/api/search', methods=['POST'])
 def search_legal():
+    start_time = time.time()
     try:
         data = request.get_json()
         raw_query = data.get('query', '').strip()
@@ -540,6 +570,8 @@ def search_legal():
         if not raw_query:
             return jsonify({"error": "Query não fornecida"}), 400
         
+        logger.info(f"Search request: query='{raw_query}', top_k={top_k}, min_relevance={min_relevance}")
+        
         # Search legal knowledge (semantic preferred)
         results, search_type = retrieve_context(raw_query, top_k=top_k)
         if search_type == "semantic":
@@ -552,7 +584,7 @@ def search_legal():
             result_ids = [str(item.get("id")) for item in results if item.get("id")]
             session_id = request.headers.get('X-Session-ID') or f"web_{int(time.time())}"
             user_id = request.headers.get('X-User-ID')
-            processing_time = time.time() - time.time()  # Will add start_time
+            processing_time = time.time() - start_time
             
             if SEMANTIC_AVAILABLE:
                 try:
