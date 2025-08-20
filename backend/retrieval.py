@@ -934,33 +934,70 @@ def record_system_metric(metric_type: str, metric_name: str, value: float, unit:
 
 
 def get_popular_queries(limit: int = 10, days: int = 7) -> List[Dict[str, Any]]:
-    """Get most popular queries in the last N days"""
+    """Get most popular queries from actual search and ask logs in the last N days"""
     if not is_ready():
         return []
     try:
         with _CONN.cursor() as cur:
             cur.execute(
                 """
-                SELECT query_normalized, total_count, avg_response_time_ms, success_rate,
-                       last_queried, categories
-                FROM query_analytics 
-                WHERE last_queried > now() - interval '%s days'
-                ORDER BY total_count DESC
+                WITH combined_queries AS (
+                    SELECT 
+                        query as search_term,
+                        created_at,
+                        response_time_ms,
+                        success,
+                        'search' as query_type
+                    FROM search_logs 
+                    WHERE created_at > now() - interval '%s days'
+                    AND query IS NOT NULL
+                    AND length(trim(query)) > 0
+                    
+                    UNION ALL
+                    
+                    SELECT 
+                        question as search_term,
+                        created_at,
+                        response_time_ms,
+                        success,
+                        'ask' as query_type
+                    FROM ask_logs 
+                    WHERE created_at > now() - interval '%s days'
+                    AND question IS NOT NULL
+                    AND length(trim(question)) > 0
+                )
+                SELECT 
+                    search_term,
+                    COUNT(*) as total_count,
+                    AVG(response_time_ms) as avg_response_time,
+                    AVG(CASE WHEN success THEN 100.0 ELSE 0.0 END) as success_rate,
+                    MAX(created_at) as last_queried,
+                    string_agg(DISTINCT query_type, ', ') as query_types
+                FROM combined_queries
+                GROUP BY search_term
+                HAVING COUNT(*) >= 1
+                ORDER BY total_count DESC, last_queried DESC
                 LIMIT %s;
                 """,
-                (days, limit)
+                (days, days, limit)
             )
-            return [
-                {
-                    "query": row[0],
-                    "count": int(row[1]),
-                    "avg_response_time": float(row[2]) if row[2] else 0,
-                    "success_rate": float(row[3]) if row[3] else 0,
-                    "last_queried": str(row[4]),
-                    "categories": row[5] or {}
-                }
-                for row in cur.fetchall()
-            ]
+            
+            results = []
+            for row in cur.fetchall():
+                search_term = row[0]
+                # Clean up the search term
+                if search_term and len(search_term.strip()) > 2:
+                    results.append({
+                        "query": search_term.strip(),
+                        "count": int(row[1]),
+                        "avg_response_time": float(row[2]) if row[2] else 0,
+                        "success_rate": float(row[3]) if row[3] else 100,
+                        "last_queried": str(row[4]),
+                        "query_types": row[5] or "search"
+                    })
+            
+            return results
+            
     except Exception as e:
         LOGGER.warning(f"Failed to get popular queries: {e}")
         return []

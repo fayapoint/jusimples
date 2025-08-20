@@ -119,23 +119,23 @@ export default function Home() {
     return () => clearInterval(phraseInterval.current);
   }, []);
 
-  // Fetch global popular searches from database
+  // Fetch global popular searches from database (real user searches only)
   const fetchGlobalPopularSearches = async () => {
     try {
       const response = await fetch(`${API_URL}/api/popular-searches`);
       const data = await response.json();
-      setGlobalPopularSearches(data.popular_searches || []);
+      
+      // Only use actual database searches - no fallbacks
+      if (data.from_database && data.popular_searches) {
+        setGlobalPopularSearches(data.popular_searches);
+        console.log(`Loaded ${data.total_found} popular searches from database`);
+      } else {
+        setGlobalPopularSearches([]);
+        console.log('No popular searches found in database yet');
+      }
     } catch (error) {
-      console.log('Could not fetch global popular searches, using fallback');
-      // Fallback popular searches if API fails
-      setGlobalPopularSearches([
-        'direitos trabalhistas',
-        'férias remuneradas',
-        'demissão por justa causa',
-        'licença maternidade',
-        'horas extras',
-        'rescisão contrato trabalho'
-      ]);
+      console.log('Could not fetch popular searches from database');
+      setGlobalPopularSearches([]);
     }
   };
 

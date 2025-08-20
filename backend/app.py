@@ -918,61 +918,43 @@ def api_admin_delete_legal_chunk(doc_id: str):
 
 @app.route('/api/popular-searches', methods=['GET'])
 def api_popular_searches():
-    """Get global popular searches from database for anonymous users"""
+    """Get popular searches from actual database logs (search_logs and ask_logs)"""
     if not SEMANTIC_AVAILABLE:
-        # Return some fallback popular searches if database not available
-        fallback_searches = [
-            "direitos trabalhistas", 
-            "férias remuneradas",
-            "demissão por justa causa",
-            "licença maternidade",
-            "horas extras",
-            "rescisão contrato trabalho",
-            "direitos consumidor",
-            "contrato locação"
-        ]
-        return jsonify({"popular_searches": fallback_searches})
+        return jsonify({"popular_searches": []})
     
     try:
         from retrieval import get_popular_queries
         
-        # Get popular queries from last 30 days
-        popular_queries = get_popular_queries(limit=8, days=30)
+        # Get popular queries from last 30 days from real database logs
+        popular_queries = get_popular_queries(limit=10, days=30)
         
-        # Extract just the terms for the frontend
-        search_terms = [q.get('query', '') for q in popular_queries if q.get('query')]
+        # Extract just the terms for the frontend with metadata
+        search_data = []
+        for q in popular_queries:
+            if q.get('query') and len(q.get('query', '').strip()) > 2:
+                search_data.append({
+                    'term': q.get('query').strip(),
+                    'count': q.get('count', 0),
+                    'types': q.get('query_types', 'search'),
+                    'success_rate': q.get('success_rate', 100)
+                })
         
-        # If no popular searches yet, return fallback
-        if not search_terms:
-            fallback_searches = [
-                "direitos trabalhistas", 
-                "férias remuneradas", 
-                "demissão por justa causa",
-                "licença maternidade",
-                "horas extras",
-                "rescisão contrato trabalho",
-                "direitos consumidor",
-                "contrato locação"
-            ]
-            return jsonify({"popular_searches": fallback_searches})
-        
-        return jsonify({"popular_searches": search_terms})
+        # Return actual database data only
+        return jsonify({
+            "popular_searches": [item['term'] for item in search_data],
+            "search_data": search_data,
+            "from_database": True,
+            "total_found": len(search_data)
+        })
         
     except Exception as e:
         logger.error(f"Error getting popular searches: {e}")
-        
-        # Return fallback searches on error
-        fallback_searches = [
-            "direitos trabalhistas",
-            "férias remuneradas", 
-            "demissão por justa causa",
-            "licença maternidade",
-            "horas extras",
-            "rescisão contrato trabalho",
-            "direitos consumidor",
-            "contrato locação"
-        ]
-        return jsonify({"popular_searches": fallback_searches})
+        return jsonify({
+            "popular_searches": [],
+            "search_data": [],
+            "from_database": False,
+            "error": str(e)
+        })
 
 @app.errorhandler(404)
 def not_found(error):
