@@ -19,14 +19,13 @@ export default function Home() {
   const [recentSearches, setRecentSearches] = useState([]);
   const [topSearches, setTopSearches] = useState([]);
   const [globalPopularSearches, setGlobalPopularSearches] = useState([]);
-  const [sortOption, setSortOption] = useState('frequency'); // frequency, recent, alphabetical
-  const [filterCategory, setFilterCategory] = useState('all'); // all, trabalhista, civil, consumidor
-  const [hoveredItem, setHoveredItem] = useState(null);
   const [recentPage, setRecentPage] = useState(0);
   const [popularPage, setPopularPage] = useState(0);
   const [isFlipping, setIsFlipping] = useState({ recent: false, popular: false });
-  const hoverTimeoutRef = useRef(null);
+  const [filterCategory] = useState('all');
+  const [sortOption] = useState('frequency');
   const inputRef = useRef(null);
+  const hoverTimeoutRef = useRef(null);
 
   const ITEMS_PER_PAGE = 4;
 
@@ -151,26 +150,6 @@ export default function Home() {
   };
 
   // Sort and filter searches
-  // Handle hover with delays to prevent jittery expansion
-  const handleItemHover = (itemKey) => {
-    // Clear any existing timeout
-    if (hoverTimeoutRef.current) {
-      clearTimeout(hoverTimeoutRef.current);
-    }
-    
-    // Set new timeout for hover
-    hoverTimeoutRef.current = setTimeout(() => {
-      setHoveredItem(itemKey);
-    }, 800); // 800ms delay before showing actions
-  };
-
-  const handleItemLeave = () => {
-    // Clear timeout and hide immediately
-    if (hoverTimeoutRef.current) {
-      clearTimeout(hoverTimeoutRef.current);
-    }
-    setHoveredItem(null);
-  };
 
   // Card navigation functions
   const navigateCard = async (cardType, direction) => {
