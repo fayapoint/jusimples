@@ -7,6 +7,7 @@ import Footer from './components/Footer';
 import CommandPalette from './components/CommandPalette';
 import AnimatedBackground from './components/AnimatedBackground';
 import SolidBackground from './components/SolidBackground';
+import GradientBackground from './components/GradientBackground';
 import BackgroundSelector from './components/BackgroundSelector';
 import Home from './pages/Home';
 import Login from './pages/Login';
@@ -112,6 +113,7 @@ function App() {
               <div className="bg-gradient"></div>
               <AnimatedBackground />
               <SolidBackground />
+              <GradientBackground />
               <div className="layout">
                 <Header />
                 <div className="content">

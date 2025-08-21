@@ -43,6 +43,30 @@ export default function SolidBackground() {
         dark: 'linear-gradient(135deg, #9a3412 0%, #c2410c 100%)',
         original: 'linear-gradient(135deg, #9a3412 0%, #c2410c 35%, #f97316 100%)',
         normal: 'linear-gradient(135deg, #c2410c 0%, #f97316 100%)'
+      },
+      black: {
+        light: '#f3f4f6',
+        dark: '#000000',
+        original: '#000000',
+        normal: '#000000'
+      },
+      white: {
+        light: '#ffffff',
+        dark: '#f9fafb',
+        original: '#ffffff',
+        normal: '#ffffff'
+      },
+      red: {
+        light: 'linear-gradient(135deg, #fef2f2 0%, #fecaca 100%)',
+        dark: 'linear-gradient(135deg, #7f1d1d 0%, #dc2626 100%)',
+        original: 'linear-gradient(135deg, #7f1d1d 0%, #dc2626 35%, #ef4444 100%)',
+        normal: 'linear-gradient(135deg, #dc2626 0%, #ef4444 100%)'
+      },
+      gray: {
+        light: 'linear-gradient(135deg, #f9fafb 0%, #e5e7eb 100%)',
+        dark: 'linear-gradient(135deg, #374151 0%, #6b7280 100%)',
+        original: 'linear-gradient(135deg, #374151 0%, #6b7280 35%, #9ca3af 100%)',
+        normal: 'linear-gradient(135deg, #6b7280 0%, #9ca3af 100%)'
       }
     };
 

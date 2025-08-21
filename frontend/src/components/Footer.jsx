@@ -54,9 +54,9 @@ export default function Footer() {
   };
   
   const handleMouseLeave = (e) => {
-    // If moving into the background selector, keep expanded
+    // If moving into the background selector when footer is expanded, keep expanded
     const toEl = e?.relatedTarget;
-    if (toEl && (toEl.closest && toEl.closest('.background-selector'))) {
+    if (expanded && toEl && (toEl.closest && toEl.closest('.background-selector'))) {
       return; // don't collapse
     }
     clearExpandTimer();
@@ -88,33 +88,29 @@ export default function Footer() {
     };
   }, [expanded, clearExpandTimer, clearCollapseTimer]);
 
-  // Ensure moving into the Background Selector keeps the footer expanded
+  // Background selector behavior when footer is expanded
   useEffect(() => {
     const selector = document.querySelector('.background-selector');
     if (!selector) return;
 
-    const onEnter = () => { clearCollapseTimer(); setExpanded(true); };
-    const onMouseDown = () => { clearCollapseTimer(); setExpanded(true); };
     const onLeave = (e) => {
       const toEl = e?.relatedTarget;
       const footerEl = footerRef.current;
       if (toEl && footerEl && (toEl === footerEl || (toEl.closest && toEl.closest('footer')))) {
         return; // moving back into footer
       }
-      // Schedule a delayed collapse when leaving selector to outside
-      scheduleCollapse(1200);
+      // Only schedule collapse if footer is expanded
+      if (expanded) {
+        scheduleCollapse(1200);
+      }
     };
 
-    selector.addEventListener('mouseenter', onEnter);
     selector.addEventListener('mouseleave', onLeave);
-    selector.addEventListener('mousedown', onMouseDown);
 
     return () => {
-      selector.removeEventListener('mouseenter', onEnter);
       selector.removeEventListener('mouseleave', onLeave);
-      selector.removeEventListener('mousedown', onMouseDown);
     };
-  }, [scheduleCollapse, clearCollapseTimer]);
+  }, [scheduleCollapse, clearCollapseTimer, expanded]);
   
   return (
     <footer 

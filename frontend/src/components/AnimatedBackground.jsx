@@ -64,6 +64,60 @@ export default function AnimatedBackground() {
         dark: ['rgba(251, 146, 60, 0.5)', 'rgba(251, 146, 60, 0.1)'],
         original: ['rgba(249, 115, 22, 0.5)', 'rgba(249, 115, 22, 0.1)'],
         normal: ['rgba(249, 115, 22, 0.5)', 'rgba(249, 115, 22, 0.1)']
+      },
+      black: {
+        light: ['rgba(0, 0, 0, 0.3)', 'rgba(0, 0, 0, 0.1)'],
+        dark: ['rgba(255, 255, 255, 0.3)', 'rgba(255, 255, 255, 0.1)'],
+        original: ['rgba(0, 0, 0, 0.5)', 'rgba(0, 0, 0, 0.1)'],
+        normal: ['rgba(0, 0, 0, 0.5)', 'rgba(0, 0, 0, 0.1)']
+      },
+      white: {
+        light: ['rgba(0, 0, 0, 0.3)', 'rgba(0, 0, 0, 0.1)'],
+        dark: ['rgba(0, 0, 0, 0.3)', 'rgba(0, 0, 0, 0.1)'],
+        original: ['rgba(255, 255, 255, 0.5)', 'rgba(255, 255, 255, 0.1)'],
+        normal: ['rgba(0, 0, 0, 0.3)', 'rgba(0, 0, 0, 0.1)']
+      },
+      red: {
+        light: ['rgba(239, 68, 68, 0.5)', 'rgba(239, 68, 68, 0.1)'],
+        dark: ['rgba(248, 113, 113, 0.5)', 'rgba(248, 113, 113, 0.1)'],
+        original: ['rgba(239, 68, 68, 0.5)', 'rgba(239, 68, 68, 0.1)'],
+        normal: ['rgba(239, 68, 68, 0.5)', 'rgba(239, 68, 68, 0.1)']
+      },
+      gray: {
+        light: ['rgba(107, 114, 128, 0.5)', 'rgba(107, 114, 128, 0.1)'],
+        dark: ['rgba(156, 163, 175, 0.5)', 'rgba(156, 163, 175, 0.1)'],
+        original: ['rgba(107, 114, 128, 0.5)', 'rgba(107, 114, 128, 0.1)'],
+        normal: ['rgba(107, 114, 128, 0.5)', 'rgba(107, 114, 128, 0.1)']
+      },
+      matrix: {
+        light: ['rgba(0, 255, 0, 0.5)', 'rgba(0, 255, 0, 0.1)'],
+        dark: ['rgba(0, 255, 0, 0.7)', 'rgba(0, 255, 0, 0.2)'],
+        original: ['rgba(0, 255, 0, 0.8)', 'rgba(0, 255, 0, 0.2)'],
+        normal: ['rgba(0, 255, 0, 0.6)', 'rgba(0, 255, 0, 0.1)']
+      },
+      waves: {
+        light: ['rgba(34, 197, 94, 0.4)', 'rgba(59, 130, 246, 0.1)'],
+        dark: ['rgba(34, 197, 94, 0.6)', 'rgba(59, 130, 246, 0.2)'],
+        original: ['rgba(34, 197, 94, 0.5)', 'rgba(59, 130, 246, 0.2)'],
+        normal: ['rgba(34, 197, 94, 0.5)', 'rgba(59, 130, 246, 0.1)']
+      },
+      particles: {
+        light: ['rgba(139, 92, 246, 0.4)', 'rgba(99, 102, 241, 0.1)'],
+        dark: ['rgba(139, 92, 246, 0.6)', 'rgba(99, 102, 241, 0.2)'],
+        original: ['rgba(139, 92, 246, 0.5)', 'rgba(99, 102, 241, 0.2)'],
+        normal: ['rgba(139, 92, 246, 0.5)', 'rgba(99, 102, 241, 0.1)']
+      },
+      spiral: {
+        light: ['rgba(249, 115, 22, 0.4)', 'rgba(249, 115, 22, 0.1)'],
+        dark: ['rgba(249, 115, 22, 0.6)', 'rgba(249, 115, 22, 0.2)'],
+        original: ['rgba(249, 115, 22, 0.5)', 'rgba(249, 115, 22, 0.2)'],
+        normal: ['rgba(249, 115, 22, 0.5)', 'rgba(249, 115, 22, 0.1)']
+      },
+      pulse: {
+        light: ['rgba(239, 68, 68, 0.4)', 'rgba(239, 68, 68, 0.1)'],
+        dark: ['rgba(239, 68, 68, 0.6)', 'rgba(239, 68, 68, 0.2)'],
+        original: ['rgba(239, 68, 68, 0.5)', 'rgba(239, 68, 68, 0.2)'],
+        normal: ['rgba(239, 68, 68, 0.5)', 'rgba(239, 68, 68, 0.1)']
       }
     };
     
@@ -72,32 +126,110 @@ export default function AnimatedBackground() {
     particleColor = themeColors[0];
     connectionColor = themeColors[1];
     
-    // Create particles
+    // Create particles with different behaviors based on animation type
     const particlesArray = [];
-    const numberOfParticles = Math.min(window.innerWidth / 10, 100); // Adjust based on screen size
+    let numberOfParticles = Math.min(window.innerWidth / 10, 100);
+    
+    // Adjust particle count based on animation type
+    if (backgroundColor === 'matrix') numberOfParticles = Math.min(window.innerWidth / 8, 120);
+    if (backgroundColor === 'particles') numberOfParticles = Math.min(window.innerWidth / 6, 150);
     
     class Particle {
       constructor() {
         this.x = Math.random() * canvas.width;
         this.y = Math.random() * canvas.height;
         this.size = Math.random() * 3 + 1;
-        this.speedX = Math.random() * 1 - 0.5;
-        this.speedY = Math.random() * 1 - 0.5;
         this.glow = 0;
         this.glowDirection = Math.random() > 0.5 ? 1 : -1;
+        this.angle = Math.random() * Math.PI * 2;
+        this.pulsePhase = Math.random() * Math.PI * 2;
+        
+        // Animation-specific properties
+        switch(backgroundColor) {
+          case 'matrix':
+            this.speedX = 0;
+            this.speedY = Math.random() * 2 + 1;
+            this.char = String.fromCharCode(0x30A0 + Math.random() * 96);
+            break;
+          case 'waves':
+            this.speedX = Math.random() * 0.5 - 0.25;
+            this.speedY = Math.random() * 0.5 - 0.25;
+            this.amplitude = Math.random() * 50 + 20;
+            this.frequency = Math.random() * 0.02 + 0.01;
+            break;
+          case 'particles':
+            this.speedX = Math.random() * 2 - 1;
+            this.speedY = Math.random() * 2 - 1;
+            this.life = 1;
+            this.decay = Math.random() * 0.02 + 0.01;
+            break;
+          case 'spiral':
+            this.distance = Math.random() * 200 + 50;
+            this.angleSpeed = Math.random() * 0.02 + 0.01;
+            this.centerX = canvas.width / 2;
+            this.centerY = canvas.height / 2;
+            break;
+          case 'pulse':
+            this.speedX = Math.random() * 0.3 - 0.15;
+            this.speedY = Math.random() * 0.3 - 0.15;
+            this.pulseSpeed = Math.random() * 0.1 + 0.05;
+            break;
+          default:
+            this.speedX = Math.random() * 1 - 0.5;
+            this.speedY = Math.random() * 1 - 0.5;
+        }
       }
       
       update() {
-        // Move particles
-        this.x += this.speedX;
-        this.y += this.speedY;
-        
-        // Bounce off edges
-        if (this.x > canvas.width || this.x < 0) {
-          this.speedX = -this.speedX;
-        }
-        if (this.y > canvas.height || this.y < 0) {
-          this.speedY = -this.speedY;
+        switch(backgroundColor) {
+          case 'matrix':
+            this.y += this.speedY;
+            if (this.y > canvas.height) {
+              this.y = -this.size;
+              this.x = Math.random() * canvas.width;
+            }
+            break;
+            
+          case 'waves':
+            this.x += this.speedX;
+            this.y += this.speedY + Math.sin(this.x * this.frequency) * this.amplitude * 0.01;
+            if (this.x > canvas.width || this.x < 0) this.speedX = -this.speedX;
+            if (this.y > canvas.height || this.y < 0) this.speedY = -this.speedY;
+            break;
+            
+          case 'particles':
+            this.x += this.speedX;
+            this.y += this.speedY;
+            this.life -= this.decay;
+            if (this.life <= 0) {
+              this.x = Math.random() * canvas.width;
+              this.y = Math.random() * canvas.height;
+              this.life = 1;
+              this.speedX = Math.random() * 2 - 1;
+              this.speedY = Math.random() * 2 - 1;
+            }
+            break;
+            
+          case 'spiral':
+            this.angle += this.angleSpeed;
+            this.x = this.centerX + Math.cos(this.angle) * this.distance;
+            this.y = this.centerY + Math.sin(this.angle) * this.distance;
+            break;
+            
+          case 'pulse':
+            this.x += this.speedX;
+            this.y += this.speedY;
+            this.pulsePhase += this.pulseSpeed;
+            this.size = (Math.sin(this.pulsePhase) * 2 + 3);
+            if (this.x > canvas.width || this.x < 0) this.speedX = -this.speedX;
+            if (this.y > canvas.height || this.y < 0) this.speedY = -this.speedY;
+            break;
+            
+          default:
+            this.x += this.speedX;
+            this.y += this.speedY;
+            if (this.x > canvas.width || this.x < 0) this.speedX = -this.speedX;
+            if (this.y > canvas.height || this.y < 0) this.speedY = -this.speedY;
         }
         
         // Pulsate glow
@@ -108,6 +240,19 @@ export default function AnimatedBackground() {
       }
       
       draw() {
+        // Special drawing for matrix animation
+        if (backgroundColor === 'matrix') {
+          ctx.fillStyle = particleColor;
+          ctx.font = `${this.size * 4}px monospace`;
+          ctx.fillText(this.char, this.x, this.y);
+          return;
+        }
+        
+        // Special drawing for particles animation with opacity
+        if (backgroundColor === 'particles') {
+          ctx.globalAlpha = this.life;
+        }
+        
         // Draw particle with glow
         ctx.beginPath();
         const gradient = ctx.createRadialGradient(
@@ -118,8 +263,13 @@ export default function AnimatedBackground() {
         gradient.addColorStop(1, 'transparent');
         
         ctx.fillStyle = gradient;
-        ctx.arc(this.x, this.y, this.size * (1 + this.glow), 0, Math.PI * 2);
+        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
         ctx.fill();
+        
+        // Reset global alpha for particles animation
+        if (backgroundColor === 'particles') {
+          ctx.globalAlpha = 1;
+        }
       }
     }
     

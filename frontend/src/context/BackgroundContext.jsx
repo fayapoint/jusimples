@@ -7,8 +7,8 @@ export function useBackground() {
 }
 
 export function BackgroundProvider({ children }) {
-  const [backgroundType, setBackgroundType] = useState('animated'); // animated, solid
-  const [backgroundColor, setBackgroundColor] = useState('default'); // default, purple, blue, green, orange
+  const [backgroundType, setBackgroundType] = useState('animated'); // animated, solid, gradient
+  const [backgroundColor, setBackgroundColor] = useState('default'); // supports colors, gradients, and animation types
 
   useEffect(() => {
     // Load background settings from localStorage
@@ -26,6 +26,18 @@ export function BackgroundProvider({ children }) {
   const changeBackgroundType = (newType) => {
     setBackgroundType(newType);
     localStorage.setItem('jusimples-bg-type', newType);
+    
+    // Reset background color to default when changing type
+    if (newType === 'gradient') {
+      setBackgroundColor('sunset');
+      localStorage.setItem('jusimples-bg-color', 'sunset');
+    } else if (newType === 'animated') {
+      setBackgroundColor('default');
+      localStorage.setItem('jusimples-bg-color', 'default');
+    } else if (newType === 'solid') {
+      setBackgroundColor('default');
+      localStorage.setItem('jusimples-bg-color', 'default');
+    }
   };
 
   const changeBackgroundColor = (newColor) => {
