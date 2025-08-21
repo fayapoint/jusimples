@@ -193,9 +193,10 @@ export default function Home() {
 
   // Cleanup timeout on unmount
   useEffect(() => {
+    const timeoutRef = hoverTimeoutRef.current;
     return () => {
-      if (hoverTimeoutRef.current) {
-        clearTimeout(hoverTimeoutRef.current);
+      if (timeoutRef) {
+        clearTimeout(timeoutRef);
       }
     };
   }, []);
