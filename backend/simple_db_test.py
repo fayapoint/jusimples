@@ -2,6 +2,14 @@ import os
 import psycopg
 from pgvector.psycopg import register_vector
 
+# Load environment variables
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+    print("✅ .env file loaded")
+except ImportError:
+    print("⚠️ dotenv not available, using system environment")
+
 # URGENT: Fix analytics schema to resolve dashboard errors
 db_url = os.getenv("DATABASE_URL")
 print(f"DATABASE_URL exists: {bool(db_url)}")

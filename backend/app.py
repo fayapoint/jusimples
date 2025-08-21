@@ -203,18 +203,51 @@ LEGAL_KNOWLEDGE = [
 ]
 
 # Initialize pgvector (if enabled and available) and optionally seed static KB
+logger.info("=== DATABASE INITIALIZATION ===")
+logger.info(f"DATABASE_URL configured: {bool(os.getenv('DATABASE_URL'))}")
+logger.info(f"SEMANTIC_AVAILABLE: {SEMANTIC_AVAILABLE}")
+logger.info(f"USE_SEMANTIC_RETRIEVAL: {USE_SEMANTIC_RETRIEVAL}")
+
 try:
     if SEMANTIC_AVAILABLE and USE_SEMANTIC_RETRIEVAL:
-        if init_pgvector():
-            if SEED_SEMANTIC_ON_START:
-                seeded = seed_static_kb_from_list(LEGAL_KNOWLEDGE)
-                logger.info(f"Semantic store ready. Seeded chunks: {seeded}")
+        logger.info("🔧 Initializing pgvector connection...")
+        init_result = init_pgvector()
+        logger.info(f"🔧 init_pgvector() returned: {init_result}")
+        
+        if init_result:
+            logger.info("✅ Database connection successful!")
+            # Test the connection immediately
+            if semantic_is_ready():
+                logger.info("✅ semantic_is_ready() = True")
+                if SEED_SEMANTIC_ON_START:
+                    seeded = seed_static_kb_from_list(LEGAL_KNOWLEDGE)
+                    logger.info(f"✅ Semantic store ready. Seeded chunks: {seeded}")
+                else:
+                    logger.info("✅ Semantic store ready. Seeding skipped (SEED_SEMANTIC_ON_START=false)")
             else:
-                logger.info("Semantic store ready. Seeding skipped (SEED_SEMANTIC_ON_START=false)")
+                logger.warning("⚠️ Database connected but semantic_is_ready() = False")
         else:
-            logger.info("Semantic store not ready (likely missing DATABASE_URL or pgvector). Fallback to keyword.")
+            logger.error("❌ Database initialization failed - checking connection...")
+            # Try once more with detailed diagnostics
+            try:
+                from retrieval import _connect
+                test_conn = _connect()
+                if test_conn:
+                    logger.info("✅ Direct connection test succeeded")
+                    test_conn.close()
+                else:
+                    logger.error("❌ Direct connection test failed")
+            except Exception as conn_test_e:
+                logger.error(f"❌ Connection test error: {conn_test_e}")
+    else:
+        if not SEMANTIC_AVAILABLE:
+            logger.warning("⚠️ SEMANTIC_AVAILABLE=False - retrieval module not imported")
+        if not USE_SEMANTIC_RETRIEVAL:
+            logger.warning("⚠️ USE_SEMANTIC_RETRIEVAL=False - semantic retrieval disabled")
 except Exception as e:
-    logger.warning(f"Semantic store initialization failed: {e}")
+    logger.error(f"❌ Semantic store initialization failed: {e}", exc_info=True)
+
+logger.info("=== DATABASE INITIALIZATION COMPLETE ===")
 
 def search_legal_knowledge(query: str) -> List[Dict]:
     """Simple keyword-based search in legal knowledge"""
@@ -409,6 +442,11 @@ def ask_question():
             # Calculate actual response time
             processing_time = time.time() - start_time
             
+            # FORCE DATABASE CONNECTION CHECK
+            logger.info(f"🔍 Database connection status: SEMANTIC_AVAILABLE={SEMANTIC_AVAILABLE}, USE_SEMANTIC_RETRIEVAL={USE_SEMANTIC_RETRIEVAL}")
+            if SEMANTIC_AVAILABLE:
+                logger.info(f"🔍 semantic_is_ready(): {semantic_is_ready()}")
+            
             # Extract comprehensive OpenAI API response data
             tokens_used = 0
             input_tokens = 0  
@@ -465,8 +503,14 @@ def ask_question():
                 output_tokens = len(ai_answer) // 4
                 llm_cost = (input_tokens * 0.00015 / 1000) + (output_tokens * 0.0006 / 1000)
             
+            # ALWAYS LOG TO DATABASE IF AVAILABLE
             if SEMANTIC_AVAILABLE:
                 try:
+                    # Force reconnection if needed
+                    if not semantic_is_ready():
+                        logger.warning("🔄 Database not ready, attempting reconnection...")
+                        init_pgvector()
+                    
                     from retrieval_extensions import log_ask_advanced
                     from retrieval import _CONN
                     log_ask_advanced(
@@ -497,11 +541,28 @@ def ask_question():
                     )
                 except ImportError:
                     # Fallback to basic logging
+                    logger.info("⚠️ Using fallback basic logging")
                     from retrieval import log_ask
                     log_ask(question, top_k, min_relevance, result_ids)
+                except Exception as log_err:
+                    logger.error(f"❌ Advanced logging failed: {log_err}, trying basic logging")
+                    try:
+                        from retrieval import log_ask
+                        log_ask(question, top_k, min_relevance, result_ids)
+                        logger.info("✅ Basic logging succeeded")
+                    except Exception as basic_err:
+                        logger.error(f"❌ All logging failed: {basic_err}")
                 logger.info(f"✅ Logged ask analytics: tokens={tokens_used}, cost=${llm_cost:.4f}, search_type={search_type}")
         except Exception as _e:
-            logger.error(f"Failed to log ask analytics: {_e}", exc_info=True)
+            logger.error(f"❌ CRITICAL: Failed to log ask analytics: {_e}", exc_info=True)
+            # Try emergency basic logging
+            try:
+                if SEMANTIC_AVAILABLE:
+                    from retrieval import log_ask
+                    log_ask(question, 3, 0.5, [])
+                    logger.info("🔧 Emergency basic logging succeeded")
+            except Exception as emergency_err:
+                logger.error(f"🚨 Emergency logging also failed: {emergency_err}")
         
         response = {
             "question": question,
@@ -586,8 +647,16 @@ def search_legal():
             user_id = request.headers.get('X-User-ID')
             processing_time = time.time() - start_time
             
+            # FORCE DATABASE CONNECTION FOR SEARCH LOGGING
+            logger.info(f"🔍 Search logging - Database status: SEMANTIC_AVAILABLE={SEMANTIC_AVAILABLE}")
+            
             if SEMANTIC_AVAILABLE:
                 try:
+                    # Force reconnection if needed
+                    if not semantic_is_ready():
+                        logger.warning("🔄 Search logging - Database not ready, attempting reconnection...")
+                        init_pgvector()
+                    
                     from retrieval_extensions import log_search_advanced
                     from retrieval import _CONN
                     log_search_advanced(
@@ -605,13 +674,31 @@ def search_legal():
                         context_found=len(results),
                         conn=_CONN
                     )
+                    logger.info(f"✅ Advanced search logging succeeded")
                 except ImportError:
                     # Fallback to basic logging
+                    logger.info("⚠️ Using fallback basic search logging")
                     from retrieval import log_search
                     log_search(raw_query, top_k, min_relevance, search_type, result_ids)
+                except Exception as log_err:
+                    logger.error(f"❌ Advanced search logging failed: {log_err}, trying basic logging")
+                    try:
+                        from retrieval import log_search
+                        log_search(raw_query, top_k, min_relevance, search_type, result_ids)
+                        logger.info("✅ Basic search logging succeeded")
+                    except Exception as basic_err:
+                        logger.error(f"❌ All search logging failed: {basic_err}")
                 logger.info(f"✅ Logged search analytics: query={raw_query[:50]}..., results={len(results)}, search_type={search_type}")
         except Exception as _e:
-            logger.error(f"Failed to log search analytics: {_e}", exc_info=True)
+            logger.error(f"❌ CRITICAL: Failed to log search analytics: {_e}", exc_info=True)
+            # Try emergency basic logging
+            try:
+                if SEMANTIC_AVAILABLE:
+                    from retrieval import log_search
+                    log_search(raw_query, 3, 0.0, "keyword", [])
+                    logger.info("🔧 Emergency search logging succeeded")
+            except Exception as emergency_err:
+                logger.error(f"🚨 Emergency search logging also failed: {emergency_err}")
         
         return jsonify({
             "query": query_for_return,
