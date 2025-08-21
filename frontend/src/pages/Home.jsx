@@ -22,8 +22,13 @@ export default function Home() {
   const [sortOption, setSortOption] = useState('frequency'); // frequency, recent, alphabetical
   const [filterCategory, setFilterCategory] = useState('all'); // all, trabalhista, civil, consumidor
   const [hoveredItem, setHoveredItem] = useState(null);
+  const [recentPage, setRecentPage] = useState(0);
+  const [popularPage, setPopularPage] = useState(0);
+  const [isFlipping, setIsFlipping] = useState({ recent: false, popular: false });
   const hoverTimeoutRef = useRef(null);
   const inputRef = useRef(null);
+
+  const ITEMS_PER_PAGE = 4;
 
   // Search history helpers
   const updateSearchHistory = (term) => {
@@ -166,6 +171,46 @@ export default function Home() {
     }
     setHoveredItem(null);
   };
+
+  // Card navigation functions
+  const navigateCard = async (cardType, direction) => {
+    const currentPage = cardType === 'recent' ? recentPage : popularPage;
+    const items = cardType === 'recent' ? recentSearches : (() => {
+      const localSearches = sortAndFilterSearches(topSearches, true);
+      const globalSearches = sortAndFilterSearches(globalPopularSearches, false)
+        .filter(term => !localSearches.some(local => local.term.toLowerCase() === term.toLowerCase()));
+      return [...localSearches.map(({ term, count }) => ({ term, count, type: 'local', badge: `${count}x` })), 
+              ...globalSearches.map(term => ({ term, count: 0, type: 'global', badge: 'Popular' }))];
+    })();
+    
+    const totalPages = Math.ceil(items.length / ITEMS_PER_PAGE);
+    const newPage = direction === 'next' 
+      ? Math.min(currentPage + 1, totalPages - 1)
+      : Math.max(currentPage - 1, 0);
+    
+    if (newPage === currentPage) return;
+    
+    setIsFlipping(prev => ({ ...prev, [cardType]: true }));
+    
+    setTimeout(() => {
+      if (cardType === 'recent') {
+        setRecentPage(newPage);
+      } else {
+        setPopularPage(newPage);
+      }
+    }, 300);
+    
+    setTimeout(() => {
+      setIsFlipping(prev => ({ ...prev, [cardType]: false }));
+    }, 600);
+  };
+
+  const getPageItems = (items, page) => {
+    const start = page * ITEMS_PER_PAGE;
+    return items.slice(start, start + ITEMS_PER_PAGE);
+  };
+
+  const getTotalPages = (items) => Math.ceil(items.length / ITEMS_PER_PAGE);
 
   // Cleanup timeout on unmount
   useEffect(() => {
@@ -338,136 +383,200 @@ export default function Home() {
         </div>
 
         {/* Enhanced Search Trends Section */}
-        <div className="search-trends-enhanced">
-          <div className="trend-panel">
+        <div className="search-trends">
+          {/* Recent Searches Card */}
+          <div className="trend-panel recent">
             <div className="trend-header">
-              <span className="trend-title">Buscas recentes</span>
-              <span className="trend-subtitle">Suas consultas anteriores</span>
-            </div>
-            <div className="trend-list">
-              {recentSearches.length > 0 ? (
-                recentSearches.map((t, idx) => (
-                  <div key={idx} className="trend-item-enhanced">
-                    <button 
-                      className="trend-chip-enhanced recent" 
-                      onClick={() => handleChipClick(t)}
-                      title="Clique para buscar novamente"
-                    >
-                      <span className="chip-text">{t}</span>
-                      <span className="chip-action">🔍</span>
-                    </button>
+              <div className="trend-title">📚 Buscas recentes</div>
+              <div className="trend-subtitle">Suas consultas anteriores</div>
+              {recentSearches.length > ITEMS_PER_PAGE && (
+                <div className="card-nav">
+                  <button 
+                    className="nav-button"
+                    onClick={() => navigateCard('recent', 'prev')}
+                    disabled={recentPage === 0}
+                    title="Página anterior"
+                  >
+                    ←
+                  </button>
+                  <div className="card-pagination">
+                    {Array.from({ length: getTotalPages(recentSearches) }, (_, i) => (
+                      <div 
+                        key={i} 
+                        className={`page-dot ${i === recentPage ? 'active' : ''}`}
+                        onClick={() => setRecentPage(i)}
+                      />
+                    ))}
                   </div>
-                ))
-              ) : (
-                <div className="trend-empty-state">
-                  <span className="empty-icon">📝</span>
-                  <span className="empty-text">Nenhuma busca recente</span>
+                  <button 
+                    className="nav-button"
+                    onClick={() => navigateCard('recent', 'next')}
+                    disabled={recentPage >= getTotalPages(recentSearches) - 1}
+                    title="Próxima página"
+                  >
+                    →
+                  </button>
                 </div>
               )}
             </div>
-          </div>
-
-          <div className="trend-panel popular">
-            <div className="trend-header">
-              <span className="trend-title">Mais buscadas</span>
-              <span className="trend-subtitle">Consultas populares da comunidade</span>
-              <div className="trend-controls">
-                <select 
-                  className="sort-select"
-                  value={sortOption}
-                  onChange={(e) => setSortOption(e.target.value)}
-                >
-                  <option value="frequency">Por frequência</option>
-                  <option value="recent">Mais recentes</option>
-                  <option value="alphabetical">A-Z</option>
-                </select>
-                <select
-                  className="filter-select"
-                  value={filterCategory}
-                  onChange={(e) => setFilterCategory(e.target.value)}
-                >
-                  <option value="all">Todas as áreas</option>
-                  <option value="trabalhista">Direito Trabalhista</option>
-                  <option value="civil">Direito Civil</option>
-                  <option value="consumidor">Direito do Consumidor</option>
-                  <option value="previdenciario">Direito Previdenciário</option>
-                </select>
+            <div className="card-content">
+              <div className="card-stack">
+                {recentSearches.length > 0 ? (
+                  <>
+                    <div className={`card-page ${isFlipping.recent ? 'exiting' : 'active'}`}>
+                      {getPageItems(recentSearches, recentPage).map((term, idx) => (
+                        <div 
+                          key={`${recentPage}-${idx}`} 
+                          className="search-item"
+                          onClick={() => handleChipClick(term)}
+                        >
+                          <div className="search-item-content">
+                            <span className="search-term">{term}</span>
+                            <div className="search-meta">
+                              <span className="meta-icon">🔍</span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    {isFlipping.recent && (
+                      <div className="card-page entering">
+                        {getPageItems(recentSearches, recentPage).map((term, idx) => (
+                          <div 
+                            key={`${recentPage}-entering-${idx}`} 
+                            className="search-item"
+                            onClick={() => handleChipClick(term)}
+                          >
+                            <div className="search-item-content">
+                              <span className="search-term">{term}</span>
+                              <div className="search-meta">
+                                <span className="meta-icon">🔍</span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="card-empty-state">
+                    <div className="empty-icon">📝</div>
+                    <div className="empty-text">Nenhuma busca recente</div>
+                    <div className="empty-subtitle">Suas consultas aparecerão aqui</div>
+                  </div>
+                )}
               </div>
             </div>
-            <div className="trend-list">
+          </div>
+
+          {/* Popular Searches Card */}
+          <div className="trend-panel popular">
+            <div className="trend-header">
+              <div className="trend-title">🔥 Mais buscadas</div>
+              <div className="trend-subtitle">Consultas populares da comunidade</div>
               {(() => {
-                // Combine local and global searches for better UX
-                const localSearches = sortAndFilterSearches(topSearches, true).map(({ term, count }, idx) => ({
-                  term,
-                  count,
-                  type: 'local',
-                  key: `local-${idx}`,
-                  badge: `${count}x`,
-                  title: `Sua busca - ${count} vezes`
-                }));
-
+                const localSearches = sortAndFilterSearches(topSearches, true);
                 const globalSearches = sortAndFilterSearches(globalPopularSearches, false)
-                  .filter(term => !localSearches.some(local => local.term.toLowerCase() === term.toLowerCase()))
-                  .map((term, idx) => ({
-                    term,
-                    count: 0,
-                    type: 'global',
-                    key: `global-${idx}`,
-                    badge: 'Popular',
-                    title: 'Busca popular da comunidade'
-                  }));
-
-                // Show local searches first, then global ones (up to 12 total)
-                const combinedSearches = [...localSearches, ...globalSearches].slice(0, 12);
-
-                return combinedSearches.length > 0 ? (
-                  combinedSearches.map((search) => (
-                    <div 
-                      key={search.key} 
-                      className="trend-item-enhanced"
-                      onMouseEnter={() => handleItemHover(search.key)}
-                      onMouseLeave={handleItemLeave}
+                  .filter(term => !localSearches.some(local => local.term.toLowerCase() === term.toLowerCase()));
+                const combinedItems = [
+                  ...localSearches.map(({ term, count }) => ({ term, count, type: 'local', badge: `${count}x` })), 
+                  ...globalSearches.map(term => ({ term, count: 0, type: 'global', badge: 'Popular' }))
+                ];
+                
+                return combinedItems.length > ITEMS_PER_PAGE && (
+                  <div className="card-nav">
+                    <button 
+                      className="nav-button"
+                      onClick={() => navigateCard('popular', 'prev')}
+                      disabled={popularPage === 0}
+                      title="Página anterior"
                     >
-                      <button 
-                        className={`trend-chip-enhanced ${search.type} ${categorizeSearch(search.term)}`}
-                        onClick={() => handleChipClick(search.term)}
-                        title={`${search.title} - Clique para pesquisar`}
-                      >
-                        <span className="chip-text">{search.term}</span>
-                        <div className="chip-metadata">
-                          <span className={search.type === 'local' ? 'chip-count' : 'chip-badge'}>
-                            {search.badge}
-                          </span>
-                          <span className="chip-category">{categorizeSearch(search.term)}</span>
-                          <span className="chip-action">🔍</span>
-                        </div>
-                      </button>
-                      <div className={`trend-actions ${hoveredItem === search.key ? 'show' : ''}`}>
-                        <button 
-                          className="action-btn explore"
-                          onClick={() => handleChipClick(`mais informações sobre ${search.term}`)}
-                          title="Explorar mais detalhes"
-                        >
-                          📊 Explorar
-                        </button>
-                        <button 
-                          className="action-btn related"
-                          onClick={() => handleChipClick(`questões relacionadas a ${search.term}`)}
-                          title="Ver temas relacionados"
-                        >
-                          🔗 Relacionados
-                        </button>
-                      </div>
+                      ←
+                    </button>
+                    <div className="card-pagination">
+                      {Array.from({ length: getTotalPages(combinedItems) }, (_, i) => (
+                        <div 
+                          key={i} 
+                          className={`page-dot ${i === popularPage ? 'active' : ''}`}
+                          onClick={() => setPopularPage(i)}
+                        />
+                      ))}
                     </div>
-                  ))
-                ) : (
-                  <div className="trend-empty-state">
-                    <span className="empty-icon">⏳</span>
-                    <span className="empty-text">Aguardando buscas</span>
-                    <span className="empty-subtitle">As consultas mais populares aparecerão aqui</span>
+                    <button 
+                      className="nav-button"
+                      onClick={() => navigateCard('popular', 'next')}
+                      disabled={popularPage >= getTotalPages(combinedItems) - 1}
+                      title="Próxima página"
+                    >
+                      →
+                    </button>
                   </div>
                 );
               })()}
+            </div>
+            <div className="card-content">
+              <div className="card-stack">
+                {(() => {
+                  const localSearches = sortAndFilterSearches(topSearches, true);
+                  const globalSearches = sortAndFilterSearches(globalPopularSearches, false)
+                    .filter(term => !localSearches.some(local => local.term.toLowerCase() === term.toLowerCase()));
+                  const combinedItems = [
+                    ...localSearches.map(({ term, count }) => ({ term, count, type: 'local', badge: `${count}x` })), 
+                    ...globalSearches.map(term => ({ term, count: 0, type: 'global', badge: 'Popular' }))
+                  ];
+
+                  return combinedItems.length > 0 ? (
+                    <>
+                      <div className={`card-page ${isFlipping.popular ? 'exiting' : 'active'}`}>
+                        {getPageItems(combinedItems, popularPage).map((item, idx) => (
+                          <div 
+                            key={`${popularPage}-${idx}`} 
+                            className={`search-item ${categorizeSearch(item.term)}`}
+                            onClick={() => handleChipClick(item.term)}
+                          >
+                            <div className="search-item-content">
+                              <span className="search-term">{item.term}</span>
+                              <div className="search-meta">
+                                <span className={`meta-badge ${item.type === 'local' ? 'count' : ''}`}>
+                                  {item.badge}
+                                </span>
+                                <span className="meta-icon">🔍</span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      {isFlipping.popular && (
+                        <div className="card-page entering">
+                          {getPageItems(combinedItems, popularPage).map((item, idx) => (
+                            <div 
+                              key={`${popularPage}-entering-${idx}`} 
+                              className={`search-item ${categorizeSearch(item.term)}`}
+                              onClick={() => handleChipClick(item.term)}
+                            >
+                              <div className="search-item-content">
+                                <span className="search-term">{item.term}</span>
+                                <div className="search-meta">
+                                  <span className={`meta-badge ${item.type === 'local' ? 'count' : ''}`}>
+                                    {item.badge}
+                                  </span>
+                                  <span className="meta-icon">🔍</span>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="card-empty-state">
+                      <div className="empty-icon">⏳</div>
+                      <div className="empty-text">Aguardando buscas</div>
+                      <div className="empty-subtitle">As consultas populares aparecerão aqui</div>
+                    </div>
+                  );
+                })()}
+              </div>
             </div>
           </div>
         </div>
