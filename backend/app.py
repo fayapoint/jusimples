@@ -1902,6 +1902,11 @@ def initialize_openai_client():
         return False
 
 
+# Export variables expected by start_backend.py
+client = getattr(openai_manager, 'client', None) if openai_manager else None
+active_model = getattr(openai_manager, 'active_model', None) if openai_manager else None
+
+
 if __name__ == '__main__':
     try:
         # Initialize OpenAI client on startup (fast, no external calls)
