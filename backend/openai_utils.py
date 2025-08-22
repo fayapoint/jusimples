@@ -10,6 +10,16 @@ import logging
 from typing import Dict, Any, Optional, Tuple, List
 from datetime import datetime
 from openai import OpenAI, APIError, RateLimitError, APIConnectionError
+# Try to import additional exception types; define fallbacks if not available
+try:
+    from openai import APITimeoutError, BadRequestError, AuthenticationError  # type: ignore
+except Exception:
+    class APITimeoutError(Exception):
+        pass
+    class BadRequestError(Exception):
+        pass
+    class AuthenticationError(Exception):
+        pass
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -76,6 +86,9 @@ class OpenAIManager:
             "request_count": 0,
             "error_count": 0
         }
+        # Client request controls
+        self.timeout = float(os.getenv('OPENAI_TIMEOUT', '30'))
+        self.max_retries = int(os.getenv('OPENAI_MAX_RETRIES', '2'))
         
         # Initialize client if possible
         self.initialize()
@@ -93,10 +106,10 @@ class OpenAIManager:
             
         try:
             # Create client
-            self.client = OpenAI(api_key=self.api_key.strip())
+            self.client = OpenAI(api_key=self.api_key.strip(), timeout=self.timeout, max_retries=self.max_retries)
             self.active_model = self.preferred_model
             self.initialized = True
-            logger.info(f"✅ OpenAI client initialized with model: {self.active_model}")
+            logger.info(f"✅ OpenAI client initialized with model: {self.active_model} (timeout={self.timeout}s, retries={self.max_retries})")
             return True
         except Exception as e:
             self.last_error = str(e)
@@ -172,7 +185,8 @@ class OpenAIManager:
         model: str = None,
         temperature: float = 0.3,
         max_tokens: int = 1024,
-        json_mode: bool = False
+        json_mode: bool = False,
+        timeout: Optional[float] = None
     ) -> Dict[Any, Any]:
         """
         Generate a completion using OpenAI API with comprehensive error handling
@@ -213,8 +227,12 @@ class OpenAIManager:
                 {"role": "user", "content": prompt}
             ]
             
-            # Make the API request
-            response = self.client.chat.completions.create(
+            logger.info(
+                f"🔎 OpenAI request -> model={model}, temp={temperature}, max_tokens={max_tokens}, json_mode={json_mode}, timeout={timeout or self.timeout}s"
+            )
+            # Make the API request (use per-request timeout via with_options for compatibility)
+            request_client = self.client.with_options(timeout=timeout or self.timeout)
+            response = request_client.chat.completions.create(
                 model=model,
                 messages=messages,
                 temperature=temperature,
@@ -247,6 +265,21 @@ class OpenAIManager:
                 
             # Update usage stats
             self._update_usage_stats(result)
+            
+        except APITimeoutError as e:  # type: ignore
+            result["error"] = f"Request timed out: {str(e)}"
+            self.usage_stats["error_count"] += 1
+            logger.error(f"⏳ OpenAI timeout error: {str(e)}")
+            
+        except AuthenticationError as e:  # type: ignore
+            result["error"] = f"Authentication error: {str(e)}"
+            self.usage_stats["error_count"] += 1
+            logger.error(f"🔐 OpenAI authentication error: {str(e)}")
+            
+        except BadRequestError as e:  # type: ignore
+            result["error"] = f"Bad request: {str(e)}"
+            self.usage_stats["error_count"] += 1
+            logger.error(f"⚠️ OpenAI bad request error: {str(e)}")
             
         except RateLimitError as e:
             result["error"] = f"Rate limit exceeded: {str(e)}"
@@ -342,6 +375,18 @@ class OpenAIManager:
             logger.error(f"❌ Failed to list models: {str(e)}")
             return []
 
+    def reconfigure_model(self, new_model: str) -> bool:
+        """Reconfigure the preferred/active model without recreating the client"""
+        try:
+            if new_model:
+                self.preferred_model = new_model
+                self.active_model = new_model
+                logger.info(f"🔁 OpenAI model reconfigured to: {self.active_model}")
+            return True
+        except Exception as e:
+            logger.error(f"❌ Failed to reconfigure model: {e}")
+            return False
+
 # Singleton instance
 openai_manager = OpenAIManager()
 
@@ -388,3 +433,8 @@ def handle_api_status_request():
         "openai": get_openai_status(),
         "models": openai_manager.get_available_models() if openai_manager.is_ready() else []
     }
+
+# Convenience function for app.py
+def initialize_openai_client() -> bool:
+    """(Re)initialize the global OpenAI client via the manager"""
+    return openai_manager.initialize()

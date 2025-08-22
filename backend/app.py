@@ -8,12 +8,12 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 # Import our custom OpenAI utilities
 try:
-    from backend.openai_utils import openai_manager, is_openai_available, get_completion, get_openai_status, handle_api_status_request
+    from backend.openai_utils import openai_manager, is_openai_available, get_completion, get_openai_status, handle_api_status_request, initialize_openai_client
 except ImportError:
     try:
-        from .openai_utils import openai_manager, is_openai_available, get_completion, get_openai_status, handle_api_status_request
+        from .openai_utils import openai_manager, is_openai_available, get_completion, get_openai_status, handle_api_status_request, initialize_openai_client
     except ImportError:
-        from openai_utils import openai_manager, is_openai_available, get_completion, get_openai_status, handle_api_status_request
+        from openai_utils import openai_manager, is_openai_available, get_completion, get_openai_status, handle_api_status_request, initialize_openai_client
 # Import LexML API utilities
 try:
     from backend.lexml_api import lexml_api, search_legal_documents, get_legal_document, get_lexml_status, handle_lexml_status_request
@@ -719,8 +719,20 @@ def health_alias():
 def ask_question():
     start_time = time.time()
     try:
-        data = request.get_json()
-        question = data.get('question', '').strip()
+        # Safely parse JSON payload; fallback to form data if needed
+        data = {}
+        try:
+            data = request.get_json(silent=True) or {}
+        except Exception as parse_err:
+            logger.warning(f"Invalid JSON in /api/ask: {parse_err}")
+            data = {}
+        if not data and request.form:
+            # Handle x-www-form-urlencoded
+            data = request.form.to_dict(flat=True)
+        if not data:
+            logger.warning(f"/api/ask received empty or non-JSON body. Content-Type={request.headers.get('Content-Type')}, Content-Length={request.headers.get('Content-Length')}")
+
+        question = (data.get('question') or '').strip()
         # Optional tuning params
         top_k_raw = data.get('top_k', 3)
         min_rel_raw = data.get('min_relevance', 0.5)
@@ -1143,14 +1155,26 @@ def switch_model():
         data = request.get_json()
         new_model = data.get('model', 'gpt-5-nano')
         
-        # Update environment variable temporarily
-        os.environ['OPENAI_MODEL'] = new_model
-        
-        # Reinitialize client
-        success = initialize_openai_client()
+        # Update environment variable (optional persistence) and reconfigure manager
+        try:
+            os.environ['OPENAI_MODEL'] = new_model
+        except Exception:
+            pass
+
+        reconfigured = False
+        if hasattr(openai_manager, 'reconfigure_model'):
+            try:
+                reconfigured = openai_manager.reconfigure_model(new_model)
+            except Exception:
+                reconfigured = False
+
+        # Ensure client is initialized
+        if not is_openai_available():
+            initialize_openai_client()
+
         current_model = openai_manager.active_model
-        
-        if success:
+
+        if reconfigured and is_openai_available():
             return jsonify({
                 "success": True,
                 "message": f"Switched to model: {current_model}",
@@ -1159,7 +1183,7 @@ def switch_model():
         else:
             return jsonify({
                 "success": False,
-                "message": "Failed to initialize with new model",
+                "message": "Failed to switch model",
                 "active_model": current_model
             }), 500
             
