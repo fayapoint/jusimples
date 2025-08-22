@@ -32,7 +32,7 @@ except ImportError:
     # dotenv not available, use environment variables directly
     pass
 
-# Import both old and new admin dashboards
+# Import Admin Dashboard v3 ONLY (enforce v3 usage)
 try:
     from backend.admin_dashboard_v3 import admin_bp_v3
     ADMIN_V3_AVAILABLE = True
@@ -46,27 +46,6 @@ except ImportError:
             ADMIN_V3_AVAILABLE = True
         except ImportError:
             ADMIN_V3_AVAILABLE = False
-
-try:
-    from backend.admin_dashboard_v2 import admin_bp_v2
-    ADMIN_V2_AVAILABLE = True
-except ImportError:
-    try:
-        from .admin_dashboard_v2 import admin_bp_v2
-        ADMIN_V2_AVAILABLE = True
-    except ImportError:
-        try:
-            from admin_dashboard_v2 import admin_bp_v2
-            ADMIN_V2_AVAILABLE = True
-        except ImportError:
-            ADMIN_V2_AVAILABLE = False
-            try:
-                from backend.admin_dashboard import admin_bp
-            except ImportError:
-                try:
-                    from .admin_dashboard import admin_bp
-                except ImportError:
-                    from admin_dashboard import admin_bp
 
 # Import the OpenAI dashboard blueprint
 try:
@@ -164,22 +143,17 @@ else:
 
 app = Flask(__name__)
 
-# Register admin dashboard blueprint (v3 preferred, then v2, then v1)
+# Register admin dashboard blueprint (v3 ONLY)
 if ADMIN_V3_AVAILABLE:
     app.register_blueprint(admin_bp_v3)
-    logger.info("✅ Admin Dashboard v3.0 registered")
-elif ADMIN_V2_AVAILABLE:
-    app.register_blueprint(admin_bp_v2)
-    logger.info("✅ Admin Dashboard v2.0 registered")
+    logger.info("✅ Admin Dashboard v3.0 registered (strict mode)")
 else:
-    from admin_dashboard import admin_bp
-    app.register_blueprint(admin_bp)
-    logger.info("Admin Dashboard v1.0 registered (fallback)")
+    logger.error("❌ Admin Dashboard v3.0 not available. No legacy dashboards will be registered.")
+    # Intentionally not falling back to legacy versions to enforce v3-only usage.
 
-# Register OpenAI dashboard blueprint if available
+# Skip legacy OpenAI dashboard blueprint to enforce v3-only admin UI
 if OPENAI_DASHBOARD_AVAILABLE:
-    app.register_blueprint(openai_dashboard_bp)
-    logger.info("✅ OpenAI Dashboard registered")
+    logger.info("ℹ️ Skipping legacy OpenAI Dashboard blueprint registration to enforce v3-only admin UI")
 
 # CORS configuration
 allowed_origins = os.getenv('CORS_ORIGINS', 'http://localhost:3000,https://jusimples.netlify.app,https://jusimplesbeta.netlify.app').split(',')
