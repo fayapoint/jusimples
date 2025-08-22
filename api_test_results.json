@@ -1,0 +1,104 @@
+{
+  "debug": {
+    "status": 200,
+    "data": {
+      "active_model": "gpt-4o-mini",
+      "api_key_configured": true,
+      "api_key_length": 132,
+      "cors_origins": [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "https://jusimples.netlify.app",
+        "https://jusimplesbeta.netlify.app"
+      ],
+      "knowledge_base_size": 5,
+      "model_configured": "gpt-4o-mini",
+      "openai_client_available": true,
+      "timestamp": "2025-08-22T16:13:56.326472"
+    }
+  },
+  "ask": {
+    "status": 200,
+    "data": {
+      "answer": "O direito civil brasileiro é um ramo do direito que regula as relações entre particulares, abrangendo direitos e deveres civis. Com base nas informações fornecidas, podemos destacar os seguintes pontos:\n\n1. **Personalidade Civil**:\n   - Toda pessoa é capaz de direitos e deveres na ordem civil, começando sua personalidade civil com o nascimento com vida, mas a lei protege os direitos do nascituro desde a concepção (Código Civil - Personalidade Civil).\n\n2. **Igualdade e Direitos Fundamentais**:\n   - A Constituição Federal garante que todos são iguais perante a lei, assegurando direitos fundamentais como a vida, liberdade, igualdade, segurança e propriedade (Constituição Federal - Art. 5º).\n\n3. **Proteção ao Consumidor**:\n   - O Código de Defesa do Consumidor estabelece direitos específicos para os consumidores, como proteção contra publicidade enganosa, produtos defeituosos, práticas abusivas, direito de arrependimento em compras online, e garantias legais e contratuais.\n\nEsses elementos mostram a abrangência do direito civil no Brasil, que visa proteger tanto os indivíduos quanto as relações de consumo.",
+      "confidence": 0.85,
+      "debug_info": {
+        "active_model": "gpt-4o-mini",
+        "api_key_configured": true,
+        "context_found": 3,
+        "openai_available": true
+      },
+      "disclaimer": "Esta resposta é baseada em IA e tem caráter informativo. Para casos complexos, consulte um advogado especializado.",
+      "params": {
+        "min_relevance": 0.3,
+        "top_k": 3
+      },
+      "question": "O que é direito civil brasileiro?",
+      "sources": [
+        {
+          "category": "direito_civil",
+          "content_preview": "Toda pessoa é capaz de direitos e deveres na ordem civil. A personalidade civil da pessoa começa do nascimento com vida; mas a lei põe a salvo, desde a concepção, os direitos do nascituro....",
+          "id": "2c22f7c3-66cb-4748-a289-63a364cebe75",
+          "relevance": 0.514130711555496,
+          "title": "Código Civil - Personalidade Civil"
+        },
+        {
+          "category": "direitos_fundamentais",
+          "content_preview": "Todos são iguais perante a lei, sem distinção de qualquer natureza, garantindo-se aos brasileiros e aos estrangeiros residentes no País a inviolabilidade do direito à vida, à liberdade, à igualdade, à...",
+          "id": "e3dbf87b-8adc-4406-85fe-08ed690281ce",
+          "relevance": 0.479152264696093,
+          "title": "Constituição Federal - Art. 5º"
+        },
+        {
+          "category": "direito_consumidor",
+          "content_preview": "O consumidor tem direito à proteção contra publicidade enganosa, produtos defeituosos, práticas abusivas, direito de arrependimento em compras online (7 dias), garantia legal e contratual....",
+          "id": "7d38b1d0-f10e-4e60-9fe7-1384ca2b3d5a",
+          "relevance": 0.436274212072931,
+          "title": "Código de Defesa do Consumidor"
+        }
+      ],
+      "system_status": {
+        "knowledge_base_size": 3,
+        "openai_available": true,
+        "search_type": "semantic"
+      },
+      "timestamp": "2025-08-22T16:14:02.807218"
+    },
+    "payload": {
+      "question": "O que é direito civil brasileiro?",
+      "top_k": 3,
+      "min_relevance": 0.3
+    }
+  },
+  "ask_teste": {
+    "status": 200,
+    "data": {
+      "answer": "✅ VERSÃO 2.3.0 ATIVA! Pergunta recebida: Este é um teste do sistema OpenAI. Sistema OpenAI funcionando corretamente.",
+      "confidence": 0.85,
+      "debug_info": {
+        "active_model": "gpt-4o-mini",
+        "api_key_configured": true,
+        "context_found": 0,
+        "openai_available": true
+      },
+      "disclaimer": "Esta resposta é baseada em IA e tem caráter informativo. Para casos complexos, consulte um advogado especializado.",
+      "params": {
+        "min_relevance": 0.3,
+        "top_k": 3
+      },
+      "question": "Este é um teste do sistema OpenAI",
+      "sources": [],
+      "system_status": {
+        "knowledge_base_size": 0,
+        "openai_available": true,
+        "search_type": "semantic"
+      },
+      "timestamp": "2025-08-22T16:14:05.423121"
+    },
+    "payload": {
+      "question": "Este é um teste do sistema OpenAI",
+      "top_k": 3,
+      "min_relevance": 0.3
+    }
+  }
+}

@@ -791,9 +791,22 @@ def ask_question():
             normalized_context.append(new_it)
         relevant_context = normalized_context
         
-        # Apply threshold only for semantic results
+        # Log relevance scores before filtering
+        if search_type == "semantic" and relevant_context:
+            scores = [f"{it.get('relevance', 0.0):.3f}" for it in relevant_context]
+            logger.info(f"Semantic search relevance scores: {scores} (threshold: {min_relevance})")
+        
+        # Apply threshold only for semantic results, but be more lenient
         if search_type == "semantic":
+            pre_filter_count = len(relevant_context)
             relevant_context = [it for it in relevant_context if it.get("relevance", 0.0) >= min_relevance]
+            
+            # If no results pass threshold but we had results, lower threshold dynamically
+            if len(relevant_context) == 0 and pre_filter_count > 0:
+                # Use a more lenient threshold (half of the requested)
+                fallback_threshold = max(0.2, min_relevance * 0.6)
+                relevant_context = [it for it in normalized_context if it.get("relevance", 0.0) >= fallback_threshold]
+                logger.info(f"Applied fallback threshold {fallback_threshold:.2f}, recovered {len(relevant_context)} documents")
         
         logger.info(f"Found {len(relevant_context)} relevant documents via {search_type}")
         
