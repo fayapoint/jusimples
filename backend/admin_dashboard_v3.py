@@ -10,9 +10,20 @@ from datetime import datetime, timedelta
 from typing import Dict, Any, List
 from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash
 
-# Database and utility imports
-from db_utils import get_db_manager
-from openai_utils import get_openai_status, openai_manager
+# Database and utility imports (robust across package/script execution)
+try:
+    # When running as a package: `backend.admin_dashboard_v3`
+    from backend.db_utils import get_db_manager  # type: ignore
+    from backend.openai_utils import get_openai_status, openai_manager  # type: ignore
+except ImportError:
+    try:
+        # Relative import when inside the backend package
+        from .db_utils import get_db_manager  # type: ignore
+        from .openai_utils import get_openai_status, openai_manager  # type: ignore
+    except ImportError:
+        # Fallback for direct script execution
+        from db_utils import get_db_manager  # type: ignore
+        from openai_utils import get_openai_status, openai_manager  # type: ignore
 
 # Optional imports with fallbacks
 try:
