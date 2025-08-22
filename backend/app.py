@@ -357,44 +357,49 @@ logger.info(f"DATABASE_URL configured: {bool(os.getenv('DATABASE_URL'))}")
 logger.info(f"SEMANTIC_AVAILABLE: {SEMANTIC_AVAILABLE}")
 logger.info(f"USE_SEMANTIC_RETRIEVAL: {USE_SEMANTIC_RETRIEVAL}")
 
-try:
-    if SEMANTIC_AVAILABLE and USE_SEMANTIC_RETRIEVAL:
-        logger.info("🔧 Initializing pgvector connection...")
-        init_result = init_pgvector()
-        logger.info(f"🔧 init_pgvector() returned: {init_result}")
-        
-        if init_result:
-            logger.info("✅ Database connection successful!")
-            # Test the connection immediately
-            if semantic_is_ready():
-                logger.info("✅ semantic_is_ready() = True")
-                if SEED_SEMANTIC_ON_START:
-                    seeded = seed_static_kb_from_list(LEGAL_KNOWLEDGE)
-                    logger.info(f"✅ Semantic store ready. Seeded chunks: {seeded}")
+# Allow skipping heavy DB init during module import to speed startup (use readiness checks instead)
+DB_INIT_ON_IMPORT = os.getenv('DB_INIT_ON_IMPORT', 'false').lower() == 'true'
+if DB_INIT_ON_IMPORT:
+    try:
+        if SEMANTIC_AVAILABLE and USE_SEMANTIC_RETRIEVAL:
+            logger.info("🔧 Initializing pgvector connection (on import)...")
+            init_result = init_pgvector()
+            logger.info(f"🔧 init_pgvector() returned: {init_result}")
+            
+            if init_result:
+                logger.info("✅ Database connection successful!")
+                # Test the connection immediately
+                if semantic_is_ready():
+                    logger.info("✅ semantic_is_ready() = True")
+                    if SEED_SEMANTIC_ON_START:
+                        seeded = seed_static_kb_from_list(LEGAL_KNOWLEDGE)
+                        logger.info(f"✅ Semantic store ready. Seeded chunks: {seeded}")
+                    else:
+                        logger.info("✅ Semantic store ready. Seeding skipped (SEED_SEMANTIC_ON_START=false)")
                 else:
-                    logger.info("✅ Semantic store ready. Seeding skipped (SEED_SEMANTIC_ON_START=false)")
+                    logger.warning("⚠️ Database connected but semantic_is_ready() = False")
             else:
-                logger.warning("⚠️ Database connected but semantic_is_ready() = False")
+                logger.error("❌ Database initialization failed - checking connection...")
+                # Try once more with detailed diagnostics
+                try:
+                    from retrieval import _connect
+                    test_conn = _connect()
+                    if test_conn:
+                        logger.info("✅ Direct connection test succeeded")
+                        test_conn.close()
+                    else:
+                        logger.error("❌ Direct connection test failed")
+                except Exception as conn_test_e:
+                    logger.error(f"❌ Connection test error: {conn_test_e}")
         else:
-            logger.error("❌ Database initialization failed - checking connection...")
-            # Try once more with detailed diagnostics
-            try:
-                from retrieval import _connect
-                test_conn = _connect()
-                if test_conn:
-                    logger.info("✅ Direct connection test succeeded")
-                    test_conn.close()
-                else:
-                    logger.error("❌ Direct connection test failed")
-            except Exception as conn_test_e:
-                logger.error(f"❌ Connection test error: {conn_test_e}")
-    else:
-        if not SEMANTIC_AVAILABLE:
-            logger.warning("⚠️ SEMANTIC_AVAILABLE=False - retrieval module not imported")
-        if not USE_SEMANTIC_RETRIEVAL:
-            logger.warning("⚠️ USE_SEMANTIC_RETRIEVAL=False - semantic retrieval disabled")
-except Exception as e:
-    logger.error(f"❌ Error during database initialization: {e}")
+            if not SEMANTIC_AVAILABLE:
+                logger.warning("⚠️ SEMANTIC_AVAILABLE=False - retrieval module not imported")
+            if not USE_SEMANTIC_RETRIEVAL:
+                logger.warning("⚠️ USE_SEMANTIC_RETRIEVAL=False - semantic retrieval disabled")
+    except Exception as e:
+        logger.error(f"❌ Error during database initialization: {e}")
+else:
+    logger.info("⏭️ Skipping DB initialization during import (DB_INIT_ON_IMPORT=false). Will check readiness asynchronously.")
 
 # Define function to retrieve context
 def retrieve_context(query, top_k=3):
@@ -652,7 +657,7 @@ def home():
         "mode": "simplified",
         "deployment_time": datetime.now().isoformat(),
         "cache_bust": "20250117_2010",
-        "endpoints": ["/api/ask", "/api/test-rag", "/health", "/admin/"]
+        "endpoints": ["/api/ask", "/api/test-rag", "/health", "/ready", "/admin/"]
     })
 
 @app.route('/api/status/kb')
@@ -711,8 +716,19 @@ def get_health():
     })
 
 @app.route('/health')
-def health_alias():
-    # Alias for platform healthchecks (e.g., Railway)
+def health_live():
+    # Lightweight liveness probe for platform healthchecks (e.g., Railway)
+    # Does NOT touch DB or external services to ensure fast 200 OK
+    return jsonify({
+        "status": "ok",
+        "timestamp": datetime.utcnow().isoformat(),
+        "service": "JuSimples API",
+        "version": "2.5.0"
+    })
+
+@app.route('/ready')
+def readiness_probe():
+    # Readiness probe with deeper checks (DB count, etc.)
     return get_health()
 
 @app.route('/api/ask', methods=['POST'])
@@ -1888,11 +1904,15 @@ def initialize_openai_client():
 
 if __name__ == '__main__':
     try:
-        # Initialize OpenAI client on startup
+        # Initialize OpenAI client on startup (fast, no external calls)
         initialize_openai_client()
         
-        # Run diagnostic check
-        check_db_connection()
+        # Run database diagnostic in the background to avoid blocking startup
+        try:
+            import threading
+            threading.Thread(target=check_db_connection, daemon=True).start()
+        except Exception as bg_e:
+            logger.warning(f"Could not start background DB check: {bg_e}")
         
         # Run Flask app
         port = int(os.getenv('PORT', 5000))

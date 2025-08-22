@@ -1,0 +1,27 @@
+[
+  {
+    "path": "/health",
+    "status": 200,
+    "body": "{\"service\":\"JuSimples API\",\"status\":\"ok\",\"timestamp\":\"2025-08-22T15:51:21.103790\",\"version\":\"2.5.0\"}\n"
+  },
+  {
+    "path": "/ready",
+    "status": 200,
+    "body": "{\"ai_system\":\"operational\",\"database_status\":\"connected\",\"knowledge_base\":\"7 documents\",\"status\":\"healthy\",\"timestamp\":\"2025-08-22T15:51:21.453670\"}\n"
+  },
+  {
+    "path": "/api/health",
+    "status": 200,
+    "body": "{\"ai_system\":\"operational\",\"database_status\":\"connected\",\"knowledge_base\":\"7 documents\",\"status\":\"healthy\",\"timestamp\":\"2025-08-22T15:51:21.485581\"}\n"
+  },
+  {
+    "path": "/api/status",
+    "status": 200,
+    "body": "{\"cors_origins\":[\"http://localhost:3000\",\"http://127.0.0.1:3000\",\"https://jusimples.netlify.app\",\"https://jusimplesbeta.netlify.app\"],\"database\":{\"knowledge_base_size\":7,\"ready\":true,\"semantic_available\":true,\"semantic_ready\":true},\"environment\":\"development\",\"status\":\"operational\",\"timestamp\":\"2025-08-22T15:51:21.815145\",\"version\":\"2.3.0\"}\n"
+  },
+  {
+    "path": "/",
+    "status": 200,
+    "body": "{\"cache_bust\":\"20250117_2010\",\"deployment_time\":\"2025-08-22T12:51:21.815600\",\"endpoints\":[\"/api/ask\",\"/api/test-rag\",\"/health\",\"/ready\",\"/admin/\"],\"message\":\"JuSimples Legal AI API - CACHE BUSTED\",\"mode\":\"simplified\",\"status\":\"running\",\"version\":\"2.5.0\"}\n"
+  }
+]
