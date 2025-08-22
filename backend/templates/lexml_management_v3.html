@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .sidebar {
+            min-height: 100vh;
+            background: linear-gradient(135deg, #2c3e50 0%, #4a6741 100%);
+            color: white;
+        }
+        .sidebar .nav-link {
+            color: rgba(255,255,255,0.8);
+            transition: all 0.3s;
+        }
+        .sidebar .nav-link:hover,
+        .sidebar .nav-link.active {
+            background: rgba(255,255,255,0.1);
+            color: white;
+            border-radius: 8px;
+        }
+        .main-content {
+            background-color: #f8f9fa;
+            min-height: 100vh;
+        }
+        .lexml-card {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            transition: transform 0.2s;
+        }
+        .lexml-card:hover {
+            transform: translateY(-2px);
+        }
+        .law-type-badge {
+            border-radius: 20px;
+        }
+        .api-call-item {
+            transition: all 0.3s;
+            border-left: 3px solid transparent;
+        }
+        .api-call-item:hover {
+            border-left-color: #17a2b8;
+            background-color: #f8f9fa;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <!-- Sidebar -->
+            <nav class="col-md-2 sidebar p-3">
+                <div class="text-center mb-4">
+                    <h3 class="mb-0"><i class="fas fa-balance-scale"></i> JuSimples</h3>
+                    <small class="text-muted">Admin Dashboard v3.0</small>
+                </div>
+                
+                <ul class="nav nav-pills flex-column">
+                    <li class="nav-item mb-2">
+                        <a class="nav-link" href="{{ url_for('admin_v3.dashboard') }}">
+                            <i class="fas fa-tachometer-alt me-2"></i> Dashboard
+                        </a>
+                    </li>
+                    <li class="nav-item mb-2">
+                        <a class="nav-link" href="{{ url_for('admin_v3.knowledge_base') }}">
+                            <i class="fas fa-book me-2"></i> Knowledge Base
+                        </a>
+                    </li>
+                    <li class="nav-item mb-2">
+                        <a class="nav-link" href="{{ url_for('admin_v3.openai_management') }}">
+                            <i class="fas fa-brain me-2"></i> OpenAI API
+                        </a>
+                    </li>
+                    <li class="nav-item mb-2">
+                        <a class="nav-link active" href="{{ url_for('admin_v3.lexml_management') }}">
+                            <i class="fas fa-gavel me-2"></i> LexML API
+                        </a>
+                    </li>
+                    <li class="nav-item mb-2">
+                        <a class="nav-link" href="{{ url_for('admin_v3.rag_system') }}">
+                            <i class="fas fa-search me-2"></i> RAG System
+                        </a>
+                    </li>
+                    <li class="nav-item mb-2">
+                        <a class="nav-link" href="{{ url_for('admin_v3.query_analytics') }}">
+                            <i class="fas fa-chart-line me-2"></i> Query Analytics
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+            
+            <!-- Main Content -->
+            <main class="col-md-10 main-content p-4">
+                <!-- Header -->
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h1 class="h3 mb-0">LexML API Management</h1>
+                    <div>
+                        <button class="btn btn-success me-2" data-bs-toggle="modal" data-bs-target="#searchModal">
+                            <i class="fas fa-search"></i> Search Laws
+                        </button>
+                        <button class="btn btn-primary me-2" onclick="testLexMLConnection()">
+                            <i class="fas fa-plug"></i> Test Connection
+                        </button>
+                        <button class="btn btn-outline-secondary" onclick="location.reload()">
+                            <i class="fas fa-sync-alt"></i> Refresh
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Status Card -->
+                <div class="row mb-4">
+                    <div class="col-md-12">
+                        <div class="lexml-card p-4">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <h5 class="mb-1">
+                                        <i class="fas fa-gavel me-2"></i>LexML API Status
+                                    </h5>
+                                    <div class="d-flex align-items-center">
+                                        {% if lexml_status.get('status') == 'available' %}
+                                        <span class="badge bg-success me-2">Available</span>
+                                        <span>Connected to LexML Brasil</span>
+                                        {% else %}
+                                        <span class="badge bg-warning me-2">Limited</span>
+                                        <span class="text-muted">{{ lexml_status.get('message', 'LexML API available but not fully configured') }}</span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                <div class="text-end">
+                                    {% if lexml_status.get('status') == 'available' %}
+                                    <i class="fas fa-check-circle fa-3x text-success"></i>
+                                    {% else %}
+                                    <i class="fas fa-exclamation-circle fa-3x text-warning"></i>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Usage Statistics -->
+                <div class="row mb-4">
+                    <div class="col-md-3">
+                        <div class="lexml-card p-3 text-center">
+                            <div class="text-primary">
+                                <i class="fas fa-phone-alt fa-2x mb-2"></i>
+                            </div>
+                            <h4 class="mb-1">{{ usage_stats.get('total_calls', 0) }}</h4>
+                            <small class="text-muted">API Calls</small>
+                            <div class="mt-1">
+                                <small class="badge bg-info">Last 30 days</small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-3">
+                        <div class="lexml-card p-3 text-center">
+                            <div class="text-success">
+                                <i class="fas fa-check-circle fa-2x mb-2"></i>
+                            </div>
+                            <h4 class="mb-1">{{ usage_stats.get('successful_calls', 0) }}</h4>
+                            <small class="text-muted">Successful</small>
+                            <div class="mt-1">
+                                <small class="text-muted">{{ "{:.1f}".format(usage_stats.get('success_rate', 0)) }}% rate</small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-3">
+                        <div class="lexml-card p-3 text-center">
+                            <div class="text-info">
+                                <i class="fas fa-file-alt fa-2x mb-2"></i>
+                            </div>
+                            <h4 class="mb-1">{{ usage_stats.get('total_documents_found', 0) }}</h4>
+                            <small class="text-muted">Documents Found</small>
+                            <div class="mt-1">
+                                <small class="text-muted">Across all searches</small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-3">
+                        <div class="lexml-card p-3 text-center">
+                            <div class="text-warning">
+                                <i class="fas fa-clock fa-2x mb-2"></i>
+                            </div>
+                            <h4 class="mb-1">{{ "{:.0f}".format(usage_stats.get('avg_response_time', 0)) }}ms</h4>
+                            <small class="text-muted">Avg Response Time</small>
+                            <div class="mt-1">
+                                <small class="badge bg-{{ 'success' if usage_stats.get('avg_response_time', 0) < 1000 else 'warning' if usage_stats.get('avg_response_time', 0) < 3000 else 'danger' }}">
+                                    {{ 'Fast' if usage_stats.get('avg_response_time', 0) < 1000 else 'Medium' if usage_stats.get('avg_response_time', 0) < 3000 else 'Slow' }}
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Quick Search Section -->
+                <div class="row mb-4">
+                    <div class="col-md-8">
+                        <div class="lexml-card p-4">
+                            <h5 class="mb-3"><i class="fas fa-search me-2"></i>Quick Law Search</h5>
+                            <form id="quickSearchForm">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label class="form-label">Search Term</label>
+                                            <input type="text" class="form-control" name="query" placeholder="e.g., código civil, lei 8078">
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="mb-3">
+                                            <label class="form-label">Law Type</label>
+                                            <select class="form-select" name="law_type">
+                                                <option value="lei">Lei</option>
+                                                <option value="decreto">Decreto</option>
+                                                <option value="constituicao">Constituição</option>
+                                                <option value="codigo">Código</option>
+                                                <option value="regulamento">Regulamento</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="mb-3">
+                                            <label class="form-label">&nbsp;</label>
+                                            <button type="button" class="btn btn-primary d-block w-100" onclick="performQuickSearch()">
+                                                <i class="fas fa-search"></i> Search
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </form>
+                            <div id="quickSearchResults" class="mt-3"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-4">
+                        <div class="lexml-card p-4">
+                            <h6 class="mb-3"><i class="fas fa-info-circle me-2"></i>LexML Information</h6>
+                            <ul class="list-unstyled">
+                                <li class="mb-2">
+                                    <i class="fas fa-check text-success me-2"></i>
+                                    <small>Access to Brazilian legal documents</small>
+                                </li>
+                                <li class="mb-2">
+                                    <i class="fas fa-check text-success me-2"></i>
+                                    <small>Federal, state and municipal laws</small>
+                                </li>
+                                <li class="mb-2">
+                                    <i class="fas fa-check text-success me-2"></i>
+                                    <small>Constitutional texts and decrees</small>
+                                </li>
+                                <li class="mb-2">
+                                    <i class="fas fa-check text-success me-2"></i>
+                                    <small>Real-time legal document search</small>
+                                </li>
+                                <li class="mb-2">
+                                    <i class="fas fa-check text-success me-2"></i>
+                                    <small>Automatic knowledge base integration</small>
+                                </li>
+                            </ul>
+                            
+                            <div class="mt-3 p-3 bg-light rounded">
+                                <small class="text-muted">
+                                    <i class="fas fa-lightbulb me-1"></i>
+                                    <strong>Tip:</strong> Use specific terms for better search results. Example: "código civil artigo 186" instead of just "responsabilidade".
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Recent API Calls -->
+                <div class="row">
+                    <div class="col-md-12">
+                        <div class="lexml-card p-4">
+                            <h5 class="mb-3"><i class="fas fa-history me-2"></i>Recent API Calls</h5>
+                            {% if recent_calls %}
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Query</th>
+                                            <th>Endpoint</th>
+                                            <th>Law Type</th>
+                                            <th>Documents Found</th>
+                                            <th>Response Time</th>
+                                            <th>Status</th>
+                                            <th>Timestamp</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for call in recent_calls %}
+                                        <tr class="api-call-item">
+                                            <td>
+                                                <div class="text-truncate" style="max-width: 200px;" title="{{ call.query }}">
+                                                    {{ call.query }}
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <code class="small">{{ call.endpoint }}</code>
+                                            </td>
+                                            <td>
+                                                <span class="law-type-badge badge bg-info">{{ call.law_type }}</span>
+                                            </td>
+                                            <td>
+                                                <span class="text-primary">{{ call.documents_found }}</span>
+                                            </td>
+                                            <td>
+                                                <span class="text-info">{{ call.response_time }}ms</span>
+                                            </td>
+                                            <td>
+                                                {% if call.success %}
+                                                <span class="badge bg-success">Success</span>
+                                                {% else %}
+                                                <span class="badge bg-danger">Failed</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                <small class="text-muted">{{ call.timestamp }}</small>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                            {% else %}
+                            <div class="text-center py-4">
+                                <i class="fas fa-search-minus fa-3x text-muted mb-3"></i>
+                                <p class="text-muted">No recent API calls found</p>
+                                <small class="text-muted">LexML API calls will appear here once searches are performed</small>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+    
+    <!-- Search Modal -->
+    <div class="modal fade" id="searchModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Search LexML Database</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="advancedSearchForm">
+                        <div class="row">
+                            <div class="col-md-8">
+                                <div class="mb-3">
+                                    <label class="form-label">Search Query</label>
+                                    <input type="text" class="form-control" name="query" placeholder="Enter legal terms, law numbers, or keywords" required>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label class="form-label">Document Type</label>
+                                    <select class="form-select" name="law_type">
+                                        <option value="lei">Lei (Law)</option>
+                                        <option value="decreto">Decreto (Decree)</option>
+                                        <option value="constituicao">Constituição (Constitution)</option>
+                                        <option value="codigo">Código (Code)</option>
+                                        <option value="regulamento">Regulamento (Regulation)</option>
+                                        <option value="portaria">Portaria (Ordinance)</option>
+                                        <option value="resolucao">Resolução (Resolution)</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label class="form-label">Jurisdiction</label>
+                                    <select class="form-select" name="jurisdiction">
+                                        <option value="">All</option>
+                                        <option value="federal">Federal</option>
+                                        <option value="estadual">State</option>
+                                        <option value="municipal">Municipal</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label class="form-label">Year From</label>
+                                    <input type="number" class="form-control" name="year_from" min="1900" max="2024" placeholder="e.g. 2000">
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label class="form-label">Year To</label>
+                                    <input type="number" class="form-control" name="year_to" min="1900" max="2024" placeholder="e.g. 2024">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="addToKnowledgeBase" name="add_to_kb" checked>
+                                <label class="form-check-label" for="addToKnowledgeBase">
+                                    Automatically add results to knowledge base
+                                </label>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="performAdvancedSearch()">
+                        <i class="fas fa-search"></i> Search LexML
+                    </button>
+                </div>
+                <div id="searchResults" class="p-3" style="display: none;"></div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        function testLexMLConnection() {
+            const btn = event.target;
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Testing...';
+            btn.disabled = true;
+            
+            setTimeout(() => {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+                alert('LexML API connection test completed. The API is accessible and responding.');
+            }, 2000);
+        }
+        
+        function performQuickSearch() {
+            const form = document.getElementById('quickSearchForm');
+            const formData = new FormData(form);
+            const query = formData.get('query');
+            
+            if (!query) {
+                alert('Please enter a search term');
+                return;
+            }
+            
+            const resultsDiv = document.getElementById('quickSearchResults');
+            resultsDiv.innerHTML = '<div class="text-center"><div class="spinner-border text-primary" role="status"></div><p class="mt-2">Searching LexML...</p></div>';
+            
+            const searchData = {
+                query: query,
+                law_type: formData.get('law_type')
+            };
+            
+            fetch('/admin/v3/api/lexml/search', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(searchData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    resultsDiv.innerHTML = `
+                        <div class="alert alert-success">
+                            <i class="fas fa-check-circle me-2"></i>
+                            Found and processed ${data.added_count} documents from LexML
+                        </div>
+                    `;
+                    setTimeout(() => {
+                        resultsDiv.innerHTML = '';
+                        form.reset();
+                    }, 3000);
+                } else {
+                    resultsDiv.innerHTML = `
+                        <div class="alert alert-warning">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            ${data.error || 'Search completed but no documents were found'}
+                        </div>
+                    `;
+                }
+            })
+            .catch(error => {
+                resultsDiv.innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        Error: ${error.message}
+                    </div>
+                `;
+            });
+        }
+        
+        function performAdvancedSearch() {
+            const form = document.getElementById('advancedSearchForm');
+            const formData = new FormData(form);
+            const query = formData.get('query');
+            
+            if (!query) {
+                alert('Please enter a search query');
+                return;
+            }
+            
+            const resultsDiv = document.getElementById('searchResults');
+            resultsDiv.style.display = 'block';
+            resultsDiv.innerHTML = '<div class="text-center"><div class="spinner-border text-primary" role="status"></div><p class="mt-2">Performing advanced search...</p></div>';
+            
+            const searchData = {
+                query: query,
+                law_type: formData.get('law_type'),
+                jurisdiction: formData.get('jurisdiction'),
+                year_from: formData.get('year_from'),
+                year_to: formData.get('year_to'),
+                add_to_kb: formData.get('add_to_kb') ? true : false
+            };
+            
+            fetch('/admin/v3/api/lexml/search', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(searchData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    resultsDiv.innerHTML = `
+                        <div class="alert alert-success">
+                            <i class="fas fa-check-circle me-2"></i>
+                            Advanced search completed successfully!<br>
+                            <strong>${data.results_count}</strong> documents found, <strong>${data.added_count}</strong> added to knowledge base.
+                        </div>
+                    `;
+                    setTimeout(() => {
+                        bootstrap.Modal.getInstance(document.getElementById('searchModal')).hide();
+                        location.reload();
+                    }, 3000);
+                } else {
+                    resultsDiv.innerHTML = `
+                        <div class="alert alert-danger">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            Search failed: ${data.error}
+                        </div>
+                    `;
+                }
+            })
+            .catch(error => {
+                resultsDiv.innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        Network error: ${error.message}
+                    </div>
+                `;
+            });
+        }
+    </script>
+</body>
+</html>

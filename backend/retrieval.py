@@ -8,11 +8,15 @@ from psycopg.types.json import Json
 from pgvector.psycopg import register_vector
 from openai import OpenAI
 
+# Import our new database utility module
+from db_utils import get_db_manager, get_connection, is_ready as db_is_ready
+
 LOGGER = logging.getLogger(__name__)
 
 EMBED_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
 EMBED_DIM = 1536  # text-embedding-3-small
 
+# For backward compatibility
 _CONN = None
 _READY = False
 _OPENAI: Optional[OpenAI] = None
@@ -33,249 +37,36 @@ def _get_openai() -> Optional[OpenAI]:
 
 
 def _connect() -> Optional[psycopg.Connection]:
+    """Legacy function that now uses db_utils.get_connection"""
     global _CONN
-    db_url = os.getenv("DATABASE_URL", "").strip()
-    if not db_url:
-        LOGGER.info("DATABASE_URL not set; semantic retrieval disabled")
-        return None
-    
-    # Log more details about the connection attempt (sanitized)
-    masked_url = "*****" + db_url[-20:] if len(db_url) > 20 else "[masked]"
-    LOGGER.info(f"Attempting database connection with URL ending in: {masked_url}")
-    
-    try:
-        LOGGER.info("Establishing PostgreSQL connection...")
-        
-        # Enhanced connection parameters for Supabase pooler compatibility
-        conn_params = {
-            "application_name": "jusimples_app",
-            "connect_timeout": 30,              # Increased timeout for better reliability
-            "keepalives": 1,
-            "keepalives_idle": 60,
-            "keepalives_interval": 10,
-            "keepalives_count": 3,
-            "sslmode": "require",               # Ensure SSL is used
-            "client_encoding": "utf8"           # Explicit encoding
-        }
-        
-        # For pooled connections, we need to handle the connection more carefully
-        conn = psycopg.connect(db_url, **conn_params)
-        
-        LOGGER.info("PostgreSQL connection successful!")
-        
-        # Set autocommit for better pooler compatibility
-        conn.autocommit = True
-        
-        # Register vector type
-        try:
-            register_vector(conn)
-            LOGGER.info("Vector extension registered successfully")
-        except Exception as e:
-            LOGGER.warning(f"Failed to register vector extension: {e}")
-        
-        # Test the connection with a simple query
-        with conn.cursor() as cur:
-            cur.execute("SELECT version();")
-            version_info = cur.fetchone()
-            LOGGER.info(f"Connected to PostgreSQL: {version_info[0] if version_info else 'Unknown version'}")
-            
-        return conn
-    except Exception as e:
-        LOGGER.error(f"Database connection error: {str(e)}")
-        
-        # Enhanced error diagnosis
-        error_str = str(e).lower()
-        if "timeout" in error_str or "timed out" in error_str:
-            LOGGER.error("⚠️  Connection timeout - check network connectivity and firewall settings")
-            LOGGER.error("💡 Try: 1) Check internet connection, 2) Verify Supabase project is active")
-        elif "authentication" in error_str or "password" in error_str or "auth" in error_str:
-            LOGGER.error("🔐 Authentication failed - check DATABASE_URL credentials")
-            LOGGER.error("💡 Verify: 1) Password is correct, 2) User has proper permissions")
-        elif "database" in error_str and ("not exist" in error_str or "does not exist" in error_str):
-            LOGGER.error("🗄️  Database does not exist - check database name in DATABASE_URL")
-        elif "connection refused" in error_str or "could not connect" in error_str:
-            LOGGER.error("🚫 Connection refused - check host and port in DATABASE_URL")
-            LOGGER.error("💡 Verify: 1) Host is reachable, 2) Port 6543 is correct for pooler")
-        elif "ssl" in error_str:
-            LOGGER.error("🔒 SSL connection issue - check SSL configuration")
-        else:
-            LOGGER.error(f"❓ Unknown connection error: {type(e).__name__}")
-            
-        return None
+    # Use our new db_utils module to get a connection
+    _CONN = get_connection()
+    return _CONN
 
 
 def init_pgvector() -> bool:
     """Initialize pgvector schema and table. Returns True if ready."""
     global _CONN, _READY
-    if _READY:
+    
+    # Use our new db_utils module
+    db_manager = get_db_manager()
+    
+    if db_manager.is_ready():
         LOGGER.info("pgvector already initialized and ready")
+        _READY = True
+        _CONN = db_manager.get_connection()
         return True
 
-    LOGGER.info("Initializing pgvector connection...")
-    _CONN = _connect()
-    if not _CONN:
-        LOGGER.error("Failed to establish database connection, pgvector initialization failed")
-        _READY = False
-        return False
+    LOGGER.info("Initializing pgvector connection and schema...")
     
-    LOGGER.info("Database connection established, proceeding with table creation/verification...")
-    
-
-    try:
-        with _CONN.cursor() as cur:
-            # Try to enable extension; ignore if not permitted
-            try:
-                cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
-            except Exception as ext_err:
-                LOGGER.warning(f"Could not create extension 'vector': {ext_err}")
-
-            cur.execute(
-                f"""
-                CREATE TABLE IF NOT EXISTS legal_chunks (
-                    id TEXT PRIMARY KEY,
-                    parent_id TEXT,
-                    title TEXT,
-                    content TEXT,
-                    category TEXT,
-                    metadata JSONB,
-                    embedding vector({EMBED_DIM})
-                );
-                """
-            )
-
-            # Enhanced analytics tables
-            cur.execute(
-                """
-                CREATE TABLE IF NOT EXISTS search_logs (
-                    id BIGSERIAL PRIMARY KEY,
-                    created_at TIMESTAMPTZ DEFAULT now(),
-                    query TEXT,
-                    top_k INT,
-                    min_relevance DOUBLE PRECISION,
-                    search_type TEXT,
-                    total INT,
-                    result_ids JSONB,
-                    user_id TEXT,
-                    session_id TEXT,
-                    response_time_ms INT,
-                    category TEXT,
-                    success BOOLEAN DEFAULT true
-                );
-                """
-            )
-            cur.execute(
-                """
-                CREATE TABLE IF NOT EXISTS ask_logs (
-                    id BIGSERIAL PRIMARY KEY,
-                    created_at TIMESTAMPTZ DEFAULT now(),
-                    question TEXT,
-                    top_k INT,
-                    min_relevance DOUBLE PRECISION,
-                    total_sources INT,
-                    result_ids JSONB,
-                    user_id TEXT,
-                    session_id TEXT,
-                    response_time_ms INT,
-                    llm_model TEXT,
-                    llm_tokens_used INT,
-                    llm_cost DECIMAL(10,6),
-                    category TEXT,
-                    success BOOLEAN DEFAULT true,
-                    error_message TEXT
-                );
-                """
-            )
-            
-            # API usage tracking
-            cur.execute(
-                """
-                CREATE TABLE IF NOT EXISTS api_usage_logs (
-                    id BIGSERIAL PRIMARY KEY,
-                    created_at TIMESTAMPTZ DEFAULT now(),
-                    endpoint TEXT,
-                    method TEXT,
-                    status_code INT,
-                    response_time_ms INT,
-                    user_id TEXT,
-                    session_id TEXT,
-                    ip_address INET,
-                    user_agent TEXT,
-                    request_size_bytes INT,
-                    response_size_bytes INT,
-                    error_message TEXT
-                );
-                """
-            )
-            
-            # Popular queries and trending topics
-            cur.execute(
-                """
-                CREATE TABLE IF NOT EXISTS query_analytics (
-                    id BIGSERIAL PRIMARY KEY,
-                    query_normalized TEXT UNIQUE,
-                    total_count INT DEFAULT 1,
-                    last_queried TIMESTAMPTZ DEFAULT now(),
-                    avg_response_time_ms DECIMAL(10,2),
-                    success_rate DECIMAL(5,2),
-                    categories JSONB,
-                    related_queries JSONB,
-                    created_at TIMESTAMPTZ DEFAULT now(),
-                    updated_at TIMESTAMPTZ DEFAULT now()
-                );
-                """
-            )
-            
-            # System performance metrics
-            cur.execute(
-                """
-                CREATE TABLE IF NOT EXISTS system_metrics (
-                    id BIGSERIAL PRIMARY KEY,
-                    recorded_at TIMESTAMPTZ DEFAULT now(),
-                    metric_type TEXT,
-                    metric_name TEXT,
-                    value DECIMAL(15,4),
-                    unit TEXT,
-                    metadata JSONB
-                );
-                """
-            )
-            
-            # User sessions tracking
-            cur.execute(
-                """
-                CREATE TABLE IF NOT EXISTS user_sessions (
-                    id BIGSERIAL PRIMARY KEY,
-                    session_id TEXT UNIQUE,
-                    user_id TEXT,
-                    started_at TIMESTAMPTZ DEFAULT now(),
-                    last_activity TIMESTAMPTZ DEFAULT now(),
-                    ip_address INET,
-                    user_agent TEXT,
-                    total_queries INT DEFAULT 0,
-                    total_time_seconds INT DEFAULT 0,
-                    pages_visited JSONB,
-                    ended_at TIMESTAMPTZ
-                );
-                """
-            )
-
-            # Performance: IVFFlat cosine index (no-op if not supported)
-            try:
-                cur.execute(
-                    """
-                    CREATE INDEX IF NOT EXISTS legal_chunks_embedding_ivfflat_cos
-                    ON legal_chunks
-                    USING ivfflat (embedding vector_cosine_ops)
-                    WITH (lists = 100);
-                    """
-                )
-            except Exception as e:
-                LOGGER.warning(f"Could not create IVFFlat index: {e}")
+    # Initialize database schema using the db_utils module
+    if db_manager.initialize_schema():
+        _CONN = db_manager.get_connection()
         _READY = True
         LOGGER.info("pgvector ready: table legal_chunks available")
         return True
-    except Exception as e:
-        LOGGER.error(f"Failed to initialize pgvector schema: {e}")
+    else:
+        LOGGER.error("Failed to initialize database schema")
         _READY = False
         return False
 
@@ -284,43 +75,36 @@ def _ensure_connection() -> bool:
     """Ensure we have a valid database connection, reconnecting if needed"""
     global _CONN, _READY
     
-    # If we don't have a connection or _READY is False, try to connect
-    if _CONN is None or not _READY:
-        LOGGER.info("No active connection, attempting to connect")
-        _CONN = _connect()
-        _READY = (_CONN is not None)
-        return _READY
+    # Use our db_utils module
+    db_manager = get_db_manager()
     
-    # If we have a connection, check if it's still valid
-    try:
-        with _CONN.cursor() as cur:
-            cur.execute("SELECT 1;")
-            # Connection is good
-            return True
-    except Exception as e:
-        LOGGER.warning(f"Connection check failed: {e}. Attempting to reconnect...")
-        try:
-            # Connection might be stale, try to close it first
-            try:
-                _CONN.close()
-            except:
-                pass
-                
-            # Try to connect again
-            _CONN = _connect()
-            _READY = (_CONN is not None)
-            return _READY
-        except Exception as reconnect_err:
-            LOGGER.error(f"Reconnection failed: {reconnect_err}")
-            _READY = False
-            return False
+    if not db_manager.is_ready():
+        LOGGER.info("No active connection, attempting to connect")
+        _CONN = db_manager.get_connection(force_new=True)
+        _READY = (_CONN is not None)
+    else:
+        # Get a connection from the manager
+        _CONN = db_manager.get_connection()
+        _READY = True
+        
+    return _READY
 
 
 def is_ready() -> bool:
     """Check if the database connection is ready"""
-    # Try to ensure we have a connection
-    _ensure_connection()
-    return _READY and (_CONN is not None)
+    global _READY, _CONN
+    
+    # Use db_utils to check if database is ready
+    db_ready = db_is_ready()
+    
+    # Ensure our local state is consistent
+    if db_ready and (_CONN is None or not _READY):
+        _CONN = get_connection()
+        _READY = (_CONN is not None)
+    elif not db_ready:
+        _READY = False
+        
+    return _READY
 
 
 def embed_texts(texts: List[str]) -> List[List[float]]:
@@ -600,56 +384,52 @@ def log_ask(question: str, top_k: int, min_relevance: float, result_ids: List[st
 
 def admin_db_overview() -> Dict[str, Any]:
     """Return high-level DB overview: counts and category breakdown."""
+    # Use the admin_db_overview function from db_utils
+    db_manager = get_db_manager()
+    db_overview = db_manager.admin_db_overview()
+    
+    # Format the response to match the expected structure
     overview = {
         "ready": is_ready(),
-        "counts": {"legal_chunks": 0, "search_logs": 0, "ask_logs": 0},
+        "counts": db_overview.get("counts", {"legal_chunks": 0, "search_logs": 0, "ask_logs": 0}),
         "categories": [],
         "recent": {"documents": [], "search_logs": [], "ask_logs": []},
     }
-    if not is_ready():
-        return overview
-    try:
-        with _CONN.cursor() as cur:
-            # Counts
-            cur.execute("SELECT COUNT(*) FROM legal_chunks;")
-            overview["counts"]["legal_chunks"] = int(cur.fetchone()[0])
-            try:
-                cur.execute("SELECT COUNT(*) FROM search_logs;")
-                overview["counts"]["search_logs"] = int(cur.fetchone()[0])
-            except Exception:
-                overview["counts"]["search_logs"] = 0
-            try:
-                cur.execute("SELECT COUNT(*) FROM ask_logs;")
-                overview["counts"]["ask_logs"] = int(cur.fetchone()[0])
-            except Exception:
-                overview["counts"]["ask_logs"] = 0
+    
+    # If we have a database connection, enhance with additional information
+    if is_ready() and db_overview.get("status") == "success":
+        try:
+            with _CONN.cursor() as cur:
+                # Categories
+                cur.execute("SELECT COALESCE(category,'nd') AS category, COUNT(*) FROM legal_chunks GROUP BY 1 ORDER BY 2 DESC LIMIT 50;")
+                overview["categories"] = [{"category": r[0], "count": int(r[1])} for r in cur.fetchall()]
 
-            # Categories
-            cur.execute("SELECT COALESCE(category,'nd') AS category, COUNT(*) FROM legal_chunks GROUP BY 1 ORDER BY 2 DESC LIMIT 50;")
-            overview["categories"] = [{"category": r[0], "count": int(r[1])} for r in cur.fetchall()]
-
-            # Recent documents
-            cur.execute("SELECT id, title, category FROM legal_chunks ORDER BY id DESC LIMIT 10;")
-            overview["recent"]["documents"] = [
-                {"id": r[0], "title": r[1], "category": r[2]} for r in cur.fetchall()
-            ]
-            # Recent logs
-            try:
-                cur.execute("SELECT created_at, query, total FROM search_logs ORDER BY created_at DESC LIMIT 10;")
-                overview["recent"]["search_logs"] = [
-                    {"created_at": str(r[0]), "query": r[1], "total": int(r[2])} for r in cur.fetchall()
+                # Recent documents
+                cur.execute("SELECT id, title, category FROM legal_chunks ORDER BY id DESC LIMIT 10;")
+                overview["recent"]["documents"] = [
+                    {"id": r[0], "title": r[1], "category": r[2]} for r in cur.fetchall()
                 ]
-            except Exception:
-                pass
-            try:
-                cur.execute("SELECT created_at, question, total_sources FROM ask_logs ORDER BY created_at DESC LIMIT 10;")
-                overview["recent"]["ask_logs"] = [
-                    {"created_at": str(r[0]), "question": r[1], "total_sources": int(r[2])} for r in cur.fetchall()
-                ]
-            except Exception:
-                pass
-    except Exception as e:
-        LOGGER.warning(f"admin_db_overview failed: {e}")
+                
+                # Recent logs
+                try:
+                    cur.execute("SELECT created_at, query, total FROM search_logs ORDER BY created_at DESC LIMIT 10;")
+                    overview["recent"]["search_logs"] = [
+                        {"created_at": str(r[0]), "query": r[1], "total": int(r[2]) if r[2] is not None else 0} for r in cur.fetchall()
+                    ]
+                except Exception as e:
+                    LOGGER.warning(f"Could not fetch search logs: {e}")
+                    
+                try:
+                    cur.execute("SELECT created_at, question, total_sources FROM ask_logs ORDER BY created_at DESC LIMIT 10;")
+                    overview["recent"]["ask_logs"] = [
+                        {"created_at": str(r[0]), "question": r[1], "total_sources": int(r[2]) if r[2] is not None else 0} for r in cur.fetchall()
+                    ]
+                except Exception as e:
+                    LOGGER.warning(f"Could not fetch ask logs: {e}")
+                    
+        except Exception as e:
+            LOGGER.warning(f"admin_db_overview enhanced data failed: {e}")
+            
     return overview
 
 

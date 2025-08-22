@@ -6,7 +6,22 @@ from datetime import datetime
 from typing import List, Dict, Any, Tuple
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from openai import OpenAI
+# Import our custom OpenAI utilities
+try:
+    from backend.openai_utils import openai_manager, is_openai_available, get_completion, get_openai_status, handle_api_status_request
+except ImportError:
+    try:
+        from .openai_utils import openai_manager, is_openai_available, get_completion, get_openai_status, handle_api_status_request
+    except ImportError:
+        from openai_utils import openai_manager, is_openai_available, get_completion, get_openai_status, handle_api_status_request
+# Import LexML API utilities
+try:
+    from backend.lexml_api import lexml_api, search_legal_documents, get_legal_document, get_lexml_status, handle_lexml_status_request
+except ImportError:
+    try:
+        from .lexml_api import lexml_api, search_legal_documents, get_legal_document, get_lexml_status, handle_lexml_status_request
+    except ImportError:
+        from lexml_api import lexml_api, search_legal_documents, get_legal_document, get_lexml_status, handle_lexml_status_request
 import json
 
 # Load environment variables only if .env file exists
@@ -19,29 +34,106 @@ except ImportError:
 
 # Import both old and new admin dashboards
 try:
-    from admin_dashboard_v2 import admin_bp_v2
+    from backend.admin_dashboard_v3 import admin_bp_v3
+    ADMIN_V3_AVAILABLE = True
+except ImportError:
+    try:
+        from .admin_dashboard_v3 import admin_bp_v3
+        ADMIN_V3_AVAILABLE = True
+    except ImportError:
+        try:
+            from admin_dashboard_v3 import admin_bp_v3
+            ADMIN_V3_AVAILABLE = True
+        except ImportError:
+            ADMIN_V3_AVAILABLE = False
+
+try:
+    from backend.admin_dashboard_v2 import admin_bp_v2
     ADMIN_V2_AVAILABLE = True
 except ImportError:
-    ADMIN_V2_AVAILABLE = False
-    from admin_dashboard import admin_bp
+    try:
+        from .admin_dashboard_v2 import admin_bp_v2
+        ADMIN_V2_AVAILABLE = True
+    except ImportError:
+        try:
+            from admin_dashboard_v2 import admin_bp_v2
+            ADMIN_V2_AVAILABLE = True
+        except ImportError:
+            ADMIN_V2_AVAILABLE = False
+            try:
+                from backend.admin_dashboard import admin_bp
+            except ImportError:
+                try:
+                    from .admin_dashboard import admin_bp
+                except ImportError:
+                    from admin_dashboard import admin_bp
+
+# Import the OpenAI dashboard blueprint
+try:
+    from backend.openai_dashboard import openai_dashboard_bp
+    OPENAI_DASHBOARD_AVAILABLE = True
+except ImportError:
+    try:
+        from .openai_dashboard import openai_dashboard_bp
+        OPENAI_DASHBOARD_AVAILABLE = True
+    except ImportError:
+        try:
+            from openai_dashboard import openai_dashboard_bp
+            OPENAI_DASHBOARD_AVAILABLE = True
+        except ImportError:
+            OPENAI_DASHBOARD_AVAILABLE = False
 
 try:
     # Optional semantic retrieval (pgvector)
-    from retrieval import (
-        init_pgvector,
-        is_ready as semantic_is_ready,
-        seed_static_kb_from_list,
-        semantic_search,
-        get_doc_by_id,
-        log_search,
-        log_ask,
-        admin_db_overview,
-        admin_list_legal_chunks,
-        admin_list_search_logs,
-        admin_list_ask_logs,
-        update_legal_chunk,
-        delete_legal_chunk,
-    )
+    try:
+        from backend.retrieval import (
+            init_pgvector,
+            is_ready as semantic_is_ready,
+            seed_static_kb_from_list,
+            semantic_search,
+            get_doc_by_id,
+            log_search,
+            log_ask,
+            admin_db_overview,
+            admin_list_legal_chunks,
+            admin_list_search_logs,
+            admin_list_ask_logs,
+            update_legal_chunk,
+            delete_legal_chunk,
+        )
+    except ImportError:
+        try:
+            from .retrieval import (
+                init_pgvector,
+                is_ready as semantic_is_ready,
+                seed_static_kb_from_list,
+                semantic_search,
+                get_doc_by_id,
+                log_search,
+                log_ask,
+                admin_db_overview,
+                admin_list_legal_chunks,
+                admin_list_search_logs,
+                admin_list_ask_logs,
+                update_legal_chunk,
+                delete_legal_chunk,
+            )
+        except ImportError:
+            from retrieval import (
+                init_pgvector,
+                is_ready as semantic_is_ready,
+                seed_static_kb_from_list,
+                semantic_search,
+                get_doc_by_id,
+                log_search,
+                log_ask,
+                admin_db_overview,
+                admin_list_legal_chunks,
+                admin_list_search_logs,
+                admin_list_ask_logs,
+                update_legal_chunk,
+                delete_legal_chunk,
+            )
     SEMANTIC_AVAILABLE = True
 except Exception as e:
     SEMANTIC_AVAILABLE = False
@@ -72,8 +164,11 @@ else:
 
 app = Flask(__name__)
 
-# Register admin dashboard blueprint (v2 if available)
-if ADMIN_V2_AVAILABLE:
+# Register admin dashboard blueprint (v3 preferred, then v2, then v1)
+if ADMIN_V3_AVAILABLE:
+    app.register_blueprint(admin_bp_v3)
+    logger.info("✅ Admin Dashboard v3.0 registered")
+elif ADMIN_V2_AVAILABLE:
     app.register_blueprint(admin_bp_v2)
     logger.info("✅ Admin Dashboard v2.0 registered")
 else:
@@ -81,126 +176,208 @@ else:
     app.register_blueprint(admin_bp)
     logger.info("Admin Dashboard v1.0 registered (fallback)")
 
+# Register OpenAI dashboard blueprint if available
+if OPENAI_DASHBOARD_AVAILABLE:
+    app.register_blueprint(openai_dashboard_bp)
+    logger.info("✅ OpenAI Dashboard registered")
+
 # CORS configuration
 allowed_origins = os.getenv('CORS_ORIGINS', 'http://localhost:3000,https://jusimples.netlify.app,https://jusimplesbeta.netlify.app').split(',')
 CORS(app, origins=allowed_origins)
 
-# OpenAI configuration
-openai_api_key = os.getenv('OPENAI_API_KEY')
-logger.info(f"OpenAI API Key status: {'SET' if openai_api_key and openai_api_key != 'your_openai_api_key_here' else 'NOT SET'}")
-logger.info(f"OpenAI API Key length: {len(openai_api_key) if openai_api_key else 0}")
+# OpenAI configuration through our utilities module
+logger.info("=== OpenAI Client Initialization ===")
+logger.info(f"OpenAI available: {is_openai_available()}")
 
-# Global variables for OpenAI client and model
-client = None
-active_model = None
+if is_openai_available():
+    status = get_openai_status()
+    logger.info(f"✅ OpenAI client initialized with model: {status['active_model']}")
+else:
+    logger.warning("❌ OpenAI client initialization failed. Check API key configuration.")
 
-def initialize_openai_client():
-    """Initialize and test OpenAI client with model fallback"""
-    global client, active_model
+# Create aliases for compatibility with existing code
+client = openai_manager.client
+active_model = openai_manager.active_model
+
+# Import our db_utils module
+try:
+    from backend.db_utils import get_db_manager
+except ImportError:
+    try:
+        from .db_utils import get_db_manager
+    except ImportError:
+        from db_utils import get_db_manager
+
+# Function to load legal knowledge from the database
+def get_legal_knowledge():
+    """Load legal knowledge from database, fall back to mock data if not available."""
+    db_manager = get_db_manager()
     
-    if not openai_api_key or openai_api_key == 'your_openai_api_key_here' or len(openai_api_key.strip()) <= 10:
-        logger.warning(f"OpenAI API key invalid: key={'exists' if openai_api_key else 'missing'}, length={len(openai_api_key) if openai_api_key else 0}")
-        client = None
-        active_model = None
-        return False
+    # Force database initialization if not ready
+    if not db_manager.is_ready():
+        logger.info("Database not ready - attempting to initialize...")
+        if db_manager.initialize_schema():
+            logger.info("Database initialized successfully")
+        else:
+            logger.warning("Database initialization failed - using mock legal data")
+            return MOCK_LEGAL_KNOWLEDGE
     
     try:
-        # Create client first
-        test_client = OpenAI(api_key=openai_api_key.strip())
-        preferred_model = os.getenv('OPENAI_MODEL', 'gpt-5-nano')
+        # Query the database for legal chunks
+        results = db_manager.execute_query("""
+            SELECT 
+                id, 
+                parent_id,
+                title, 
+                content, 
+                category,
+                metadata,
+                created_at,
+                updated_at
+            FROM legal_chunks 
+            ORDER BY created_at DESC
+            LIMIT 1000
+        """)
         
-        # Try preferred model first
-        try:
-            logger.info(f"Testing preferred model: {preferred_model}")
-            test_response = test_client.chat.completions.create(
-                model=preferred_model,
-                messages=[{"role": "user", "content": "Test"}],
-                max_tokens=5
-            )
-            client = test_client
-            active_model = preferred_model
-            logger.info(f"✅ OpenAI client initialized successfully with preferred model: {preferred_model}")
-            return True
+        if not results:
+            logger.warning("No legal chunks found in database - checking if table exists and seeding...")
+            # Try to seed some basic data if table is empty
+            try:
+                seed_result = _seed_basic_legal_data(db_manager)
+                if seed_result:
+                    # Try query again after seeding
+                    results = db_manager.execute_query("""
+                        SELECT id, parent_id, title, content, category, metadata, created_at, updated_at
+                        FROM legal_chunks 
+                        ORDER BY created_at DESC
+                        LIMIT 1000
+                    """)
+                if not results:
+                    logger.warning("Still no data after seeding - using mock data")
+                    return MOCK_LEGAL_KNOWLEDGE
+            except Exception as seed_e:
+                logger.error(f"Error seeding basic data: {seed_e}")
+                return MOCK_LEGAL_KNOWLEDGE
             
-        except Exception as model_error:
-            logger.warning(f"❌ Preferred model {preferred_model} failed: {str(model_error)}")
+        knowledge_items = []
+        for row in results:
+            # Extract metadata as a dictionary
+            metadata = row[5] if row[5] else {}
             
-            # Try fallback model only if different
-            fallback_model = "gpt-4o-mini"
-            if fallback_model != preferred_model:
-                logger.info(f"🔄 Trying fallback model: {fallback_model}")
-                test_response = test_client.chat.completions.create(
-                    model=fallback_model,
-                    messages=[{"role": "user", "content": "Test"}],
-                    max_tokens=5
-                )
-                client = test_client
-                active_model = fallback_model
-                logger.info(f"✅ OpenAI client initialized with fallback model: {fallback_model}")
-                return True
-            else:
-                # Same model failed, don't retry
-                raise model_error
+            # Create knowledge item with additional fields
+            item = {
+                "id": row[0],
+                "parent_id": row[1],
+                "title": row[2],
+                "content": row[3],
+                "category": row[4],
+                "keywords": metadata.get("keywords", []),
+                "source": metadata.get("source", "Unknown"),
+                "relevance_score": metadata.get("relevance_score", 0.5),
+                "law_type": metadata.get("law_type", ""),
+                "jurisdiction": metadata.get("jurisdiction", "BR"),
+                "date_created": row[6].isoformat() if row[6] else None,
+                "date_updated": row[7].isoformat() if row[7] else None,
+                "tags": metadata.get("tags", []),
+                "complexity_level": metadata.get("complexity_level", "medium")
+            }
+            knowledge_items.append(item)
             
+        logger.info(f"✅ Loaded {len(knowledge_items)} legal documents from database")
+        return knowledge_items
+        
     except Exception as e:
-        logger.error(f"❌ Failed to initialize OpenAI client: {type(e).__name__}: {str(e)}")
-        client = None
-        active_model = None
+        logger.error(f"❌ Error loading legal knowledge from database: {e}")
+        logger.info("Falling back to mock data")
+        return MOCK_LEGAL_KNOWLEDGE
+
+
+def _seed_basic_legal_data(db_manager):
+    """Seed the database with basic legal data if it's empty"""
+    try:
+        # Insert mock data into the database
+        for item in MOCK_LEGAL_KNOWLEDGE:
+            metadata = {
+                "keywords": item.get("keywords", []),
+                "source": item.get("source", "Unknown"),
+                "relevance_score": item.get("relevance_score", 0.5),
+                "law_type": "constitutional" if "Constituição" in item.get("title", "") else "civil",
+                "jurisdiction": "BR",
+                "tags": item.get("keywords", []),
+                "complexity_level": "medium"
+            }
+            
+            from psycopg.types.json import Json
+            db_manager.execute_query("""
+                INSERT INTO legal_chunks (id, title, content, category, metadata)
+                VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (id) DO NOTHING
+            """, (
+                item["id"],
+                item["title"],
+                item["content"],
+                item["category"],
+                Json(metadata)
+            ))
+        
+        logger.info("✅ Seeded database with basic legal data")
+        return True
+    except Exception as e:
+        logger.error(f"❌ Failed to seed basic legal data: {e}")
         return False
 
-# Initialize OpenAI client - simplified approach
-logger.info("=== OpenAI Client Initialization ===")
-
-# Global client variables
-client = None
-active_model = None
-
-# Simple initialization without complex error handling
-try:
-    if openai_api_key and openai_api_key.strip() and openai_api_key != 'your_openai_api_key_here':
-        client = OpenAI(api_key=openai_api_key.strip())
-        active_model = os.getenv('OPENAI_MODEL', 'gpt-5-nano')
-        logger.info(f"✅ OpenAI client initialized with model: {active_model}")
-    else:
-        logger.warning("❌ No valid OpenAI API key found")
-except Exception as e:
-    logger.error(f"❌ OpenAI initialization failed: {e}")
-    client = None
-    active_model = None
-
-# Legal knowledge base (simplified approach)
-LEGAL_KNOWLEDGE = [
+# Fallback mock data for when database is not available
+MOCK_LEGAL_KNOWLEDGE = [
     {
         "title": "Constituição Federal - Art. 5º",
         "content": "Todos são iguais perante a lei, sem distinção de qualquer natureza, garantindo-se aos brasileiros e aos estrangeiros residentes no País a inviolabilidade do direito à vida, à liberdade, à igualdade, à segurança e à propriedade.",
+        "keywords": ["direitos fundamentais", "igualdade", "liberdade"],
+        "id": "cf-art5",
         "category": "direitos_fundamentais",
-        "keywords": ["direitos fundamentais", "igualdade", "liberdade", "vida", "segurança", "propriedade"]
+        "source": "Constituição Federal de 1988",
+        "relevance_score": 1.0
     },
     {
-        "title": "Código Civil - Personalidade Civil",
-        "content": "Toda pessoa é capaz de direitos e deveres na ordem civil. A personalidade civil da pessoa começa do nascimento com vida; mas a lei põe a salvo, desde a concepção, os direitos do nascituro.",
-        "category": "direito_civil",
-        "keywords": ["personalidade civil", "capacidade", "nascimento", "nascituro", "direitos civis"]
+        "title": "Código Civil - Art. 186",
+        "content": "Aquele que, por ação ou omissão voluntária, negligência ou imprudência, violar direito e causar dano a outrem, ainda que exclusivamente moral, comete ato ilícito.",
+        "keywords": ["ato ilícito", "dano", "responsabilidade"],
+        "id": "cc-art186",
+        "category": "responsabilidade_civil",
+        "source": "Código Civil de 2002",
+        "relevance_score": 0.9
     },
     {
-        "title": "CLT - Direitos Trabalhistas",
-        "content": "São direitos dos trabalhadores urbanos e rurais: relação de emprego protegida contra despedida arbitrária, seguro-desemprego, salário mínimo, irredutibilidade salarial, décimo terceiro salário, repouso semanal remunerado, férias anuais remuneradas.",
-        "category": "direito_trabalhista",
-        "keywords": ["trabalho", "emprego", "salário", "férias", "demissão", "CLT", "trabalhador"]
-    },
-    {
-        "title": "Código de Defesa do Consumidor",
-        "content": "O consumidor tem direito à proteção contra publicidade enganosa, produtos defeituosos, práticas abusivas, direito de arrependimento em compras online (7 dias), garantia legal e contratual.",
+        "title": "Lei 8.078/90 (CDC) - Art. 6º",
+        "content": "São direitos básicos do consumidor: a proteção da vida, saúde e segurança contra os riscos provocados por práticas no fornecimento de produtos e serviços considerados perigosos ou nocivos.",
+        "keywords": ["direitos do consumidor", "proteção", "produtos perigosos"],
+        "id": "cdc-art6",
         "category": "direito_consumidor",
-        "keywords": ["consumidor", "compra", "produto defeituoso", "garantia", "arrependimento", "CDC"]
+        "source": "Código de Defesa do Consumidor",
+        "relevance_score": 0.85
     },
     {
-        "title": "Direito de Família - Pensão Alimentícia",
-        "content": "A pensão alimentícia é devida entre parentes, cônjuges ou companheiros. O valor deve considerar as necessidades do alimentando e as possibilidades do alimentante, podendo ser revista a qualquer tempo.",
-        "category": "direito_familia",
-        "keywords": ["pensão alimentícia", "família", "filhos", "divórcio", "alimentante", "necessidades"]
+        "title": "CLT - Art. 482",
+        "content": "Constituem justa causa para rescisão do contrato de trabalho pelo empregador: a) ato de improbidade; b) incontinência de conduta ou mau procedimento; c) negociação habitual.",
+        "keywords": ["justa causa", "rescisão", "contrato de trabalho"],
+        "id": "clt-art482",
+        "category": "direito_trabalho",
+        "source": "Consolidação das Leis do Trabalho",
+        "relevance_score": 0.8
+    },
+    {
+        "title": "Lei 8.906/94 - Art. 7º",
+        "content": "São direitos do advogado: exercer, com liberdade, a profissão em todo o território nacional; ter respeitada sua independência profissional.",
+        "keywords": ["advogado", "direitos", "liberdade profissional"],
+        "id": "estatuto-adv-art7",
+        "category": "advocacia",
+        "source": "Estatuto da Advocacia e da OAB",
+        "relevance_score": 0.75
     }
 ]
+
+# Initialize legal knowledge with mock data initially
+# We'll refresh it on each relevant API call to ensure most recent data
+LEGAL_KNOWLEDGE = MOCK_LEGAL_KNOWLEDGE.copy()
 
 # Initialize pgvector (if enabled and available) and optionally seed static KB
 logger.info("=== DATABASE INITIALIZATION ===")
@@ -245,119 +422,253 @@ try:
         if not USE_SEMANTIC_RETRIEVAL:
             logger.warning("⚠️ USE_SEMANTIC_RETRIEVAL=False - semantic retrieval disabled")
 except Exception as e:
-    logger.error(f"❌ Semantic store initialization failed: {e}", exc_info=True)
+    logger.error(f"❌ Error during database initialization: {e}")
 
-logger.info("=== DATABASE INITIALIZATION COMPLETE ===")
-
-def search_legal_knowledge(query: str) -> List[Dict]:
-    """Simple keyword-based search in legal knowledge"""
+# Define function to retrieve context
+def retrieve_context(query, top_k=3):
+    """Retrieve context from database with semantic search or keyword fallback"""
+    if not query or not query.strip():
+        logger.warning("Empty query passed to retrieve_context")
+        return [], "none"
+    
+    start_time = time.time()
+    results = []
+    search_type = "none"
+        
+    # Try semantic search first if available
+    if SEMANTIC_AVAILABLE and USE_SEMANTIC_RETRIEVAL:
+        try:
+            # Check if semantic search is ready
+            semantic_ready = False
+            try:
+                semantic_ready = semantic_is_ready()
+            except Exception as ready_err:
+                logger.warning(f"Error checking semantic_is_ready: {ready_err}")
+                
+            if semantic_ready:
+                logger.info(f"Attempting semantic search for: '{query[:50]}...' with top_k={top_k}")
+                try:
+                    results = semantic_search(query, top_k=top_k)
+                    search_duration = time.time() - start_time
+                    
+                    # If semantic search yields results, return them
+                    if results:
+                        logger.info(f"✅ Semantic search found {len(results)} results in {search_duration:.2f}s")
+                        return results, "semantic"
+                    else:
+                        logger.info(f"⚠️ Semantic search returned 0 results in {search_duration:.2f}s; falling back to keyword search")
+                except Exception as search_err:
+                    logger.warning(f"Error during semantic_search execution: {search_err}")
+            else:
+                logger.warning(f"Semantic search not ready, falling back to keyword")
+        except Exception as e:
+            logger.warning(f"Unexpected error in semantic search path: {e}")
+    else:
+        if not SEMANTIC_AVAILABLE:
+            logger.debug("SEMANTIC_AVAILABLE=False - skipping semantic search")
+        if not USE_SEMANTIC_RETRIEVAL:
+            logger.debug("USE_SEMANTIC_RETRIEVAL=False - skipping semantic search")
+    
+    # Fallback to keyword search
+    keyword_start = time.time()
+    try:
+        results, search_type = search_legal_knowledge(query, top_k), "keyword"
+        keyword_duration = time.time() - keyword_start
+        logger.info(f"Keyword search found {len(results)} results in {keyword_duration:.2f}s")
+    except Exception as keyword_err:
+        logger.error(f"Keyword search failed: {keyword_err}")
+        results, search_type = [], "failed"
+    
+    total_duration = time.time() - start_time
+    logger.info(f"Total retrieval time: {total_duration:.2f}s using {search_type} search")
+    return results, search_type
+    
+# Define keyword search function
+def search_legal_knowledge(query, limit=10):
+    """Keyword-based retrieval from database or fallback to static KB."""
+    if not query or not query.strip():
+        logger.warning("Empty query passed to search_legal_knowledge")
+        return []
+        
     query_lower = query.lower()
     results = []
     
-    for item in LEGAL_KNOWLEDGE:
+    # Try database search first
+    try:
+        db_manager = get_db_manager()
+        db_ready = db_manager.is_ready() if db_manager else False
+        
+        if not db_manager:
+            logger.error("Database manager returned None")
+        elif not db_ready:
+            logger.warning("Database not ready for search operation") 
+            
+        if db_ready:
+            try:
+                # Use SQL ILIKE for case-insensitive substring matching
+                search_query = f"%{query_lower}%"
+                sql = """
+                    SELECT 
+                        id, 
+                        parent_id, 
+                        title, 
+                        content, 
+                        category, 
+                        metadata
+                    FROM legal_chunks
+                    WHERE 
+                        LOWER(title) LIKE %s OR 
+                        LOWER(content) LIKE %s
+                    LIMIT %s
+                """
+                
+                results_db = db_manager.execute_query(sql, (search_query, search_query, limit))
+                
+                if results_db:
+                    for row in results_db:
+                        # Extract metadata
+                        metadata = row[5] or {}
+                        keywords = metadata.get("keywords", [])
+                        
+                        # Calculate match score
+                        match_score = 0
+                        for keyword in keywords:
+                            if isinstance(keyword, str) and (keyword.lower() in query_lower or query_lower in keyword.lower()):
+                                match_score += 0.2
+                                
+                        if query_lower in row[2].lower():  # title
+                            match_score += 0.5
+                            
+                        if query_lower in row[3].lower():  # content
+                            match_score += 0.3
+                        
+                        # Ensure minimum score
+                        match_score = max(match_score, 0.1)  # At least some relevance since it matched SQL
+                        
+                        # Create result
+                        result = {
+                            "id": row[0],
+                            "parent_id": row[1],
+                            "title": row[2],
+                            "content": row[3],
+                            "category": row[4],
+                            "keywords": keywords,
+                            "source": metadata.get("source", "Unknown"),
+                            "relevance_score": metadata.get("relevance_score", 0.5),
+                            "score": match_score
+                        }
+                        results.append(result)
+                    
+                    # Sort by score
+                    results = sorted(results, key=lambda x: x["score"], reverse=True)
+                    
+                    logger.info(f"Found {len(results)} results in database for keyword query: {query}")
+                    return results[:limit]
+            except Exception as e:
+                logger.error(f"Error executing database query: {e}")
+    except Exception as e:
+        logger.error(f"Error with database manager: {e}")
+    
+    # Fallback to in-memory search
+    logger.warning(f"Falling back to in-memory search for: {query}")
+    
+    # Get most current data
+    kb_data = get_legal_knowledge()
+    
+    for item in kb_data:
         # Check if query matches keywords or content
         match_score = 0
-        for keyword in item["keywords"]:
-            if keyword.lower() in query_lower:
-                match_score += 1
-        
-        if match_score > 0 or query_lower in item["content"].lower():
-            results.append({
-                **item,
-                "relevance": match_score
-            })
+        for keyword in item.get("keywords", []):
+            if keyword.lower() in query_lower or query_lower in keyword.lower():
+                match_score += 0.2
+                
+        if query_lower in item.get("title", "").lower():
+            match_score += 0.5
+            
+        if query_lower in item.get("content", "").lower():
+            match_score += 0.3
+            
+        if match_score > 0:
+            result = item.copy()
+            result["score"] = match_score
+            results.append(result)
     
-    # Sort by relevance
-    results.sort(key=lambda x: x["relevance"], reverse=True)
-    return results[:3]  # Return top 3 results
-
-
-def retrieve_context(query: str, top_k: int = 3) -> Tuple[List[Dict[str, Any]], str]:
-    """Retrieve context using semantic search if ready, otherwise keyword search.
-    Returns (results, search_type).
-    """
-    try:
-        if SEMANTIC_AVAILABLE and USE_SEMANTIC_RETRIEVAL and semantic_is_ready():
-            results = semantic_search(query, top_k=top_k)
-            # If semantic search yields no results (e.g., embedding error or empty table), fallback to keyword
-            if results:
-                return results, "semantic"
-            logger.info("Semantic search returned 0 results; falling back to keyword search")
-    except Exception as e:
-        logger.warning(f"Semantic retrieval failed, falling back to keyword: {e}")
-    # Fallback to keyword
-    return search_legal_knowledge(query), "keyword"
+    # Sort by score
+    results = sorted(results, key=lambda x: x["score"], reverse=True)
+    
+    # Limit results
+    return results[:limit]
 
 def generate_ai_response(question, relevant_context):
-    """Generate AI response using OpenAI with relevant legal context - VERSION 2.2.0"""
-    global client, active_model
-    
-    logger.info(f"🔄 [v2.2.0] Starting AI response generation for: {question[:50]}...")
+    """Generate AI response using OpenAI with relevant legal context - VERSION 2.3.0"""
+    logger.info(f"🔄 [v2.3.0] Starting AI response generation for: {question[:50]}...")
     
     # FORCE RETURN REAL RESPONSE FOR TESTING
     if "teste" in question.lower():
         return f"✅ VERSÃO 2.3.0 ATIVA! Pergunta recebida: {question}. Sistema OpenAI funcionando corretamente."
     
-    # Check if we have a valid API key
-    if not openai_api_key or openai_api_key.strip() == 'your_openai_api_key_here' or len(openai_api_key.strip()) < 20:
-        error_msg = f"❌ Invalid OpenAI API key: length={len(openai_api_key) if openai_api_key else 0}"
-        logger.error(error_msg)
-        return f"ERRO API KEY v2.2.0: {error_msg}"
-    
-    # Create a fresh OpenAI client for this request
-    try:
-        logger.info("🔧 [v2.2.0] Creating fresh OpenAI client...")
-        fresh_client = OpenAI(api_key=openai_api_key.strip())
+    # Check if OpenAI is available
+    if not is_openai_available():
+        error_msg = "OpenAI API não está disponível. Verifique a configuração da chave API."
+        logger.error(f"❌ {error_msg}")
+        return f"ERRO: {error_msg}"
         
+    try:
         # Prepare context for the AI
         context_text = "\n\n".join([
-            f"**{doc['title']}** (Categoria: {doc['category']})\n{doc['content']}"
+            f"--- Documento: {doc.get('title', 'Sem título')} ---\n{doc.get('content', '')}" 
             for doc in relevant_context
         ])
         
-        prompt = f"""Você é um assistente jurídico especializado em direito brasileiro. 
+        # Prompt template
+        prompt = f"""
+        Sua tarefa é responder a perguntas sobre direito brasileiro com base nas informações fornecidas.
+        
+        PERGUNTA DO USUÁRIO:
+        {question}
+        
+        CONTEXTO JURÍDICO RELEVANTE:
+        {context_text if context_text.strip() else "Não há informações específicas disponíveis sobre este tema."}
+        
+        INSTRUÇÕES:
+        - Sua resposta deve ser baseada APENAS nas informações fornecidas no CONTEXTO acima.
+        - Seja conciso, claro e preciso.
+        - Estruture sua resposta de forma organizada, usando marcadores ou numeração quando apropriado.
+        - Se o CONTEXTO não tiver informações suficientes, diga que não possui informações suficientes e sugira que o usuário reformule a pergunta.
+        - Não invente informações ou cite leis que não estejam no CONTEXTO.
+        - Sempre mencione a fonte legal relevante (artigo, lei, etc.)"""
 
-Baseando-se exclusivamente no contexto legal fornecido abaixo, responda à pergunta do usuário de forma clara, precisa e acessível.
-
-CONTEXTO LEGAL:
-{context_text}
-
-PERGUNTA: {question}
-
-INSTRUÇÕES:
-- Use apenas as informações do contexto fornecido
-- Seja claro e objetivo
-- Use linguagem acessível ao cidadão comum
-- Se a pergunta não puder ser respondida com o contexto disponível, informe isso
-- Sempre mencione a fonte legal relevante (artigo, lei, etc.)"""
-
-        # Determine model to use from env or current active model (project default gpt-5-nano)
-        model_to_use = os.getenv('OPENAI_MODEL', active_model or 'gpt-5-nano')
-        logger.info(f"🚀 [v2.2.0] Making OpenAI API call with model: {model_to_use}")
-        response = fresh_client.chat.completions.create(
-            model=model_to_use,
-            messages=[
-                {"role": "system", "content": "Você é um assistente jurídico especializado em direito brasileiro."},
-                {"role": "user", "content": prompt}
-            ],
-            max_tokens=500,
-            temperature=0.3
+        # System message for the assistant
+        system_message = """Você é um assistente jurídico especializado em direito brasileiro. 
+        Responda apenas com base no contexto fornecido e siga as instruções do usuário."""
+        
+        # Get completion from our utilities module
+        logger.info(f"🚀 [v2.3.0] Calling OpenAI API through utilities module")
+        result = get_completion(
+            prompt=prompt,
+            system_message=system_message,
+            temperature=0.3,
+            max_tokens=1024
         )
         
-        ai_response = response.choices[0].message.content.strip()
-        logger.info(f"✅ [v2.2.0] SUCCESS! OpenAI response received, length: {len(ai_response)}")
-        logger.info(f"📝 Response preview: {ai_response[:100]}...")
-        
-        # Update global client and model on success
-        client = fresh_client
-        active_model = model_to_use
-        
-        return ai_response
+        if result["success"]:
+            ai_response = result["content"]
+            logger.info(f"✅ [v2.3.0] SUCCESS! OpenAI response received, length: {len(ai_response)}")
+            logger.info(f"📊 Tokens used: {result['metrics']['tokens']['total']} "
+                      f"(input: {result['metrics']['tokens']['input']}, "
+                      f"output: {result['metrics']['tokens']['output']})")
+            logger.info(f"💰 Cost: ${result['metrics']['cost']:.6f}")
+            logger.info(f"📝 Response preview: {ai_response[:100]}...")
+            return ai_response
+        else:
+            error_msg = f"❌ [v2.3.0] OpenAI API Error: {result['error']}"
+            logger.error(error_msg)
+            return f"Erro na consulta à IA v2.3.0: {result['error']}"
         
     except Exception as e:
-        error_msg = f"❌ [v2.2.0] OpenAI API Error: {type(e).__name__}: {str(e)}"
+        error_msg = f"❌ [v2.3.0] Unexpected error: {type(e).__name__}: {str(e)}"
         logger.error(error_msg)
-        return f"Erro na consulta à IA v2.2.0: {str(e)}"
+        return f"Erro inesperado na consulta à IA v2.3.0: {str(e)}"
 
 @app.route('/')
 def home():
@@ -372,22 +683,59 @@ def home():
         "endpoints": ["/api/ask", "/api/test-rag", "/health", "/admin/"]
     })
 
-@app.route('/health')
-def health():
+@app.route('/api/status/kb')
+def get_kb_status():
+    """Knowledge base status endpoint"""
+    # Get fresh count from database
+    db_manager = get_db_manager()
+    count = 0
+    
+    if db_manager and db_manager.is_ready():
+        try:
+            results = db_manager.execute_query("SELECT COUNT(*) FROM legal_chunks")
+            if results:
+                count = results[0][0]
+        except Exception as e:
+            logger.warning(f"Error getting legal_chunks count: {e}")
+            # Fall back to mock data length
+            count = len(MOCK_LEGAL_KNOWLEDGE)
+    else:
+        # Fall back to mock data length
+        count = len(MOCK_LEGAL_KNOWLEDGE)
+    
     return jsonify({
         "status": "healthy",
         "timestamp": datetime.utcnow().isoformat(),
         "ai_system": "operational",
-        "knowledge_base": f"{len(LEGAL_KNOWLEDGE)} documents"
+        "knowledge_base": f"{count} documents",
+        "database_status": "connected" if db_manager.is_ready() else "disconnected"
     })
 
 @app.route('/api/health')
-def health_check():
+def get_health():
+    # Get fresh count from database
+    db_manager = get_db_manager()
+    count = 0
+    
+    if db_manager.is_ready():
+        try:
+            results = db_manager.execute_query("SELECT COUNT(*) FROM legal_chunks")
+            if results:
+                count = results[0][0]
+        except Exception as e:
+            logger.warning(f"Error getting legal_chunks count: {e}")
+            # Fall back to mock data length
+            count = len(MOCK_LEGAL_KNOWLEDGE)
+    else:
+        # Fall back to mock data length
+        count = len(MOCK_LEGAL_KNOWLEDGE)
+    
     return jsonify({
         "status": "healthy",
         "timestamp": datetime.utcnow().isoformat(),
         "ai_system": "operational",
-        "knowledge_base": f"{len(LEGAL_KNOWLEDGE)} documents"
+        "knowledge_base": f"{count} documents",
+        "database_status": "connected" if db_manager.is_ready() else "disconnected"
     })
 
 @app.route('/api/ask', methods=['POST'])
@@ -459,13 +807,16 @@ def ask_question():
             created_timestamp = None
             logprobs = None
             
-            # Get actual usage data from OpenAI response if available
-            if hasattr(response, 'usage') and response.usage:
-                tokens_used = response.usage.total_tokens
-                input_tokens = response.usage.prompt_tokens  
-                output_tokens = response.usage.completion_tokens
+            # Estimate token usage and cost based on text length (OpenAI response object not available here)
+            if tokens_used == 0 and client and ai_answer and "Erro" not in ai_answer:
+                # Rough estimation: ~4 characters per token
+                estimated_input_tokens = len(question) // 4 + sum(len(doc.get('content', '')) for doc in relevant_context) // 4
+                estimated_output_tokens = len(ai_answer) // 4
+                tokens_used = estimated_input_tokens + estimated_output_tokens
+                input_tokens = estimated_input_tokens
+                output_tokens = estimated_output_tokens
                 
-                # Calculate actual cost based on model
+                # Calculate cost based on model
                 model_for_cost = active_model or 'gpt-4o-mini'
                 if 'gpt-4o-mini' in model_for_cost.lower():
                     llm_cost = (input_tokens * 0.00015 / 1000) + (output_tokens * 0.0006 / 1000)
@@ -476,32 +827,9 @@ def ask_question():
                 else:
                     # Default to gpt-4o-mini pricing
                     llm_cost = (input_tokens * 0.00015 / 1000) + (output_tokens * 0.0006 / 1000)
-            
-            # Extract all available OpenAI response metadata
-            if hasattr(response, 'choices') and response.choices:
-                choice = response.choices[0]
-                finish_reason = choice.finish_reason
-                if hasattr(choice, 'logprobs') and choice.logprobs:
-                    logprobs = str(choice.logprobs)[:500]  # Truncate if too long
-            
-            if hasattr(response, 'system_fingerprint'):
-                system_fingerprint = response.system_fingerprint
                 
-            if hasattr(response, 'id'):
-                response_id = response.id
-                
-            if hasattr(response, 'model'):
-                model_used = response.model
-                
-            if hasattr(response, 'created'):
-                created_timestamp = response.created
-                
-            # Fallback estimation if no usage data
-            if tokens_used == 0 and client and ai_answer and "Erro" not in ai_answer:
-                tokens_used = len(ai_answer) // 4 + len(question) // 4
-                input_tokens = len(question) // 4
-                output_tokens = len(ai_answer) // 4
-                llm_cost = (input_tokens * 0.00015 / 1000) + (output_tokens * 0.0006 / 1000)
+                # Set model used
+                model_used = active_model or 'gpt-4o-mini'
             
             # ALWAYS LOG TO DATABASE IF AVAILABLE
             if SEMANTIC_AVAILABLE:
@@ -608,16 +936,58 @@ def ask_question():
             }
         }), 500
 
-@app.route('/api/search', methods=['POST'])
+@app.route('/api/search', methods=['POST', 'GET'])
 def search_legal():
+    """
+    Search API endpoint - supports both GET and POST methods
+    
+    GET: /api/search?q=query_text&top_k=3&min_relevance=0.0
+    POST: {"query": "query_text", "top_k": 3, "min_relevance": 0.0}
+    
+    Returns legal knowledge base items matching the query using semantic search with
+    keyword search fallback if semantic search is not available or returns no results.
+    """
+    
     start_time = time.time()
     try:
-        data = request.get_json()
-        raw_query = data.get('query', '').strip()
+        # Handle both GET and POST methods
+        if request.method == 'POST':
+            # Handle JSON payload for POST
+            try:
+                data = request.get_json() or {}
+                raw_query = data.get('query', '').strip()
+                top_k_raw = data.get('top_k', 3)
+                min_rel_raw = data.get('min_relevance', 0.0)
+            except Exception as e:
+                logger.error(f"Error parsing POST JSON: {e}")
+                return jsonify({
+                    "error": "Formato JSON inválido",
+                    "message": "Por favor forneça dados em formato JSON válido"
+                }), 400
+        else:  # GET
+            # Get parameters from URL query string
+            raw_query = request.args.get('q', '').strip() or request.args.get('query', '').strip()
+            if not raw_query:
+                return jsonify({
+                    "error": "Parâmetro de busca ausente", 
+                    "message": "Forneça o parâmetro 'q' ou 'query' na URL",
+                    "example": "/api/search?q=consumidor"
+                }), 400
+                
+            top_k_raw = request.args.get('top_k', 3)
+            min_rel_raw = request.args.get('min_relevance', 0.0)
+            
+            # Convert string params to correct types for GET
+            try:
+                top_k_raw = int(top_k_raw)
+            except (ValueError, TypeError):
+                top_k_raw = 3
+            try:
+                min_rel_raw = float(min_rel_raw)
+            except (ValueError, TypeError):
+                min_rel_raw = 0.0
+                
         query_lower = raw_query.lower()
-        # Optional tuning params
-        top_k_raw = data.get('top_k', 3)
-        min_rel_raw = data.get('min_relevance', 0.0)
         try:
             top_k = int(top_k_raw)
         except Exception:
@@ -817,15 +1187,286 @@ def debug_info():
         "timestamp": datetime.utcnow().isoformat()
     })
 
+@app.route('/api/status')
+def get_status():
+    """General API status endpoint with comprehensive status information"""
+    # Get knowledge base count from database
+    db_manager = get_db_manager()
+    kb_count = 0
+    db_ready = False
+    
+    if db_manager and db_manager.is_ready():
+        db_ready = True
+        try:
+            results = db_manager.execute_query("SELECT COUNT(*) FROM legal_chunks")
+            if results:
+                kb_count = results[0][0]
+        except Exception as e:
+            logger.warning(f"Error getting legal_chunks count: {e}")
+            # Fall back to mock data length
+            kb_count = len(MOCK_LEGAL_KNOWLEDGE)
+    
+    return jsonify({
+        "status": "operational",
+        "version": "2.3.0",
+        "environment": os.getenv('FLASK_ENV', 'development'),
+        "cors_origins": allowed_origins,
+        "database": {
+            "ready": db_ready,
+            "knowledge_base_size": kb_count,
+            "semantic_available": SEMANTIC_AVAILABLE,
+            "semantic_ready": semantic_is_ready() if SEMANTIC_AVAILABLE else False
+        },
+        "timestamp": datetime.utcnow().isoformat()
+    })
+
+@app.route('/api/status/openai')
+def get_openai_api_status():
+    """OpenAI API status endpoint with detailed metrics
+    
+    GET /api/status/openai
+    
+    Returns:
+    - Connection status
+    - Model information
+    - Token usage metrics
+    - Cost tracking
+    """
+    return jsonify(handle_api_status_request())
+
+@app.route('/api/status/lexml')
+def get_lexml_api_status():
+    """LexML API status endpoint with test query
+    
+    GET /api/status/lexml
+    
+    Returns:
+    - API status
+    - Request metrics
+    - Test query results
+    """
+    return jsonify(handle_lexml_status_request())
+
 @app.route('/api/legal-data')
 def get_legal_data():
+    # Fetch fresh data from database
+    fresh_data = get_legal_knowledge()
+    
+    # Return the data as JSON
     return jsonify({
-        "data": LEGAL_KNOWLEDGE,
-        "total": len(LEGAL_KNOWLEDGE),
+        "data": fresh_data,
+        "total": len(fresh_data),
         "last_updated": datetime.utcnow().isoformat()
     })
 
+@app.route('/api/legal-data/<item_id>')
+def get_legal_item_details(item_id):
+    """Get detailed information about a legal knowledge base item by ID.
+    
+    GET /api/legal-data/:item_id
+    
+    Returns:
+    - Item details
+    - Parent and child relationships
+    - Related items from internal knowledge base
+    - Related documents from LexML API (if enabled)
+    """
+    # Start timer for performance tracking
+    start_time = time.time()
+    
+    try:
+        # First try to fetch from database
+        db_manager = get_db_manager()
+        if db_manager and db_manager.is_ready():
+            # Get base item data
+            sql = """SELECT id, parent_id, title, content, category, metadata 
+                   FROM legal_chunks WHERE id = %s"""
+            result = db_manager.execute_query(sql, (item_id,))
+            
+            if result:
+                # Format item data
+                item_data = {
+                    "id": result[0][0],
+                    "parent_id": result[0][1],
+                    "title": result[0][2],
+                    "content": result[0][3],
+                    "category": result[0][4],
+                    "metadata": result[0][5] if result[0][5] else {}
+                }
+                
+                # Get children if any
+                sql_children = """SELECT id, title, category FROM legal_chunks WHERE parent_id = %s"""
+                children_result = db_manager.execute_query(sql_children, (item_id,))
+                
+                children = []
+                if children_result:
+                    for child in children_result:
+                        children.append({
+                            "id": child[0],
+                            "title": child[1],
+                            "category": child[2]
+                        })
+                
+                item_data["children"] = children
+                
+                # Get parent details if parent_id exists
+                if item_data["parent_id"]:
+                    sql_parent = """SELECT id, title, category FROM legal_chunks WHERE id = %s"""
+                    parent_result = db_manager.execute_query(sql_parent, (item_data["parent_id"],))
+                    
+                    if parent_result:
+                        item_data["parent"] = {
+                            "id": parent_result[0][0],
+                            "title": parent_result[0][1],
+                            "category": parent_result[0][2]
+                        }
+                
+                # Find related items (semantically similar if semantic search available, otherwise by category)
+                related_items = []
+                try:
+                    if SEMANTIC_AVAILABLE and USE_SEMANTIC_RETRIEVAL and semantic_is_ready():
+                        # Use semantic search to find related items
+                        related = semantic_search(item_data["content"], top_k=5, exclude_ids=[item_id])
+                        related_items = related if related else []
+                    else:
+                        # Fallback to category-based related items
+                        sql_related = """SELECT id, title, category FROM legal_chunks 
+                                       WHERE category = %s AND id != %s LIMIT 5"""
+                        related_results = db_manager.execute_query(sql_related, 
+                                                                 (item_data["category"], item_id))
+                        
+                        if related_results:
+                            related_items = [
+                                {"id": r[0], "title": r[1], "category": r[2]}
+                                for r in related_results
+                            ]
+                except Exception as e:
+                    logger.warning(f"Error finding related items: {e}")
+                
+                item_data["related_items"] = related_items
+                
+                # Add LexML API related documents if enabled
+                try:
+                    use_lexml_api = os.getenv("USE_LEXML_API", "").lower() in ["true", "1", "yes", "y", "on"]
+                    if use_lexml_api and lexml_api:
+                        # Use item title and category as search terms
+                        search_term = f"{item_data['title']} {item_data['category']}"
+                        logger.info(f"Searching LexML API for: {search_term}")
+                        
+                        # Get LexML recommendations based on item content
+                        lexml_results = lexml_api.search(search_term, max_results=3)
+                        if lexml_results and lexml_results.get("items"):
+                            item_data["lexml_recommendations"] = lexml_results.get("items", [])
+                            item_data["_metadata"]["lexml_search_time_ms"] = lexml_results.get("search_time_ms")
+                        else:
+                            item_data["lexml_recommendations"] = []
+                except Exception as e:
+                    logger.warning(f"Error fetching LexML recommendations: {e}")
+                    item_data["lexml_recommendations"] = []
+                    item_data["_metadata"]["lexml_error"] = str(e)
+                
+                # Add server processing metadata
+                item_data["_metadata"] = {
+                    "retrieved_at": datetime.utcnow().isoformat(),
+                    "source": "database",
+                    "processing_time_ms": round((time.time() - start_time) * 1000, 2)
+                }
+                
+                return jsonify(item_data)
+        
+        # Fallback to static knowledge if DB not available
+        all_items = get_legal_knowledge()
+        for item in all_items:
+            if str(item["id"]) == str(item_id):
+                item["_metadata"] = {
+                    "retrieved_at": datetime.utcnow().isoformat(),
+                    "source": "static",
+                    "processing_time_ms": round((time.time() - start_time) * 1000, 2)
+                }
+                return jsonify(item)
+                
+        # If not found in static data either
+        return jsonify({
+            "error": "Item não encontrado",
+            "message": f"Nenhum item encontrado com o ID: {item_id}"
+        }), 404
+        
+    except Exception as e:
+        logger.error(f"Error retrieving legal item {item_id}: {e}")
+        return jsonify({
+            "error": "Erro ao buscar item legal",
+            "message": "Ocorreu um erro ao buscar os detalhes do item.",
+            "debug_info": {
+                "error_type": type(e).__name__,
+                "error_message": str(e)
+            }
+        }), 500
+
 @app.route('/api/documentos', methods=['GET'])
+def get_all_documents():
+    """Fetch all legal documents from semantic store (if available)."""
+    try:
+        # Check if semantic search is available
+        if not (SEMANTIC_AVAILABLE and USE_SEMANTIC_RETRIEVAL and semantic_is_ready()):
+            return jsonify({
+                "error": "Serviço de documentos não disponível",
+                "message": "A busca semântica não está disponível no momento."
+            }), 503
+        
+        # Fetch all documents from the database
+        db_manager = get_db_manager()
+        if not db_manager or not db_manager.is_ready():
+            return jsonify({
+                "error": "Banco de dados indisponível",
+                "message": "Não foi possível conectar ao banco de dados."
+            }), 503
+        
+        # Fetch documents with pagination
+        page = request.args.get('page', 1, type=int)
+        per_page = min(request.args.get('per_page', 20, type=int), 50)  # Max 50 per page
+        offset = (page - 1) * per_page
+        
+        # Get total count
+        count_sql = """SELECT COUNT(*) FROM legal_chunks"""
+        count_result = db_manager.execute_query(count_sql)
+        total_documents = count_result[0][0] if count_result else 0
+        
+        # Get paginated documents
+        docs_sql = """SELECT id, parent_id, title, category, metadata 
+                   FROM legal_chunks ORDER BY id LIMIT %s OFFSET %s"""
+        docs_result = db_manager.execute_query(docs_sql, (per_page, offset))
+        
+        documents = []
+        if docs_result:
+            for doc in docs_result:
+                documents.append({
+                    "id": doc[0],
+                    "parent_id": doc[1],
+                    "title": doc[2],
+                    "category": doc[3],
+                    "metadata": doc[4] if doc[4] else {}
+                })
+        
+        return jsonify({
+            "documents": documents,
+            "total": total_documents,
+            "page": page,
+            "per_page": per_page,
+            "pages": (total_documents + per_page - 1) // per_page,
+            "timestamp": datetime.utcnow().isoformat()
+        })
+        
+    except Exception as e:
+        logger.error(f"Error fetching documents: {e}")
+        return jsonify({
+            "error": "Erro ao buscar documentos",
+            "message": "Ocorreu um erro ao buscar a lista de documentos.",
+            "debug_info": {
+                "error_type": type(e).__name__,
+                "error_message": str(e)
+            }
+        }), 500
+
 @app.route('/api/documentos/<doc_id>', methods=['GET'])
 def get_document_by_id(doc_id=None):
     """Fetch a single legal document by id from semantic store (if available)."""
@@ -919,6 +1560,71 @@ def get_ads():
         },
     ]
     return jsonify({"ads": ads, "updated_at": datetime.utcnow().isoformat()})
+
+@app.route('/api/recommendations/lexml', methods=['GET'])
+def get_lexml_recommendations():
+    """Get recommendations from LexML API based on search query.
+    
+    Query Parameters:
+    - q: Search query (required)
+    - max_results: Maximum number of results to return (default: 5)
+    
+    Returns:
+    - List of LexML document recommendations
+    - Search metadata (time, query)
+    """
+    try:
+        # Check if LexML API is enabled
+        use_lexml_api = os.getenv("USE_LEXML_API", "").lower() in ["true", "1", "yes", "y", "on"]
+        if not use_lexml_api or not lexml_api:
+            return jsonify({
+                "error": "LexML API not enabled",
+                "message": "Enable USE_LEXML_API environment variable to use this feature."
+            }), 503
+        
+        # Get query parameters
+        query = request.args.get('q', '')
+        if not query or not query.strip():
+            return jsonify({
+                "error": "Missing query parameter",
+                "message": "Please provide a search query with the 'q' parameter."
+            }), 400
+            
+        # Get max results parameter (default: 5, max: 20)
+        try:
+            max_results = min(int(request.args.get('max_results', 5)), 20)
+        except ValueError:
+            max_results = 5
+            
+        # Get recommendations from LexML API
+        start_time = time.time()
+        results = lexml_api.search(query, max_results=max_results)
+        processing_time = round((time.time() - start_time) * 1000, 2)
+        
+        # Add processing metadata
+        response = {
+            "recommendations": results.get("items", []),
+            "metadata": {
+                "query": query,
+                "max_results": max_results,
+                "processing_time_ms": processing_time,
+                "timestamp": datetime.utcnow().isoformat(),
+                "search_time_ms": results.get("search_time_ms")
+            }
+        }
+        
+        return jsonify(response)
+        
+    except Exception as e:
+        logger.error(f"Error getting LexML recommendations: {e}")
+        return jsonify({
+            "error": "Failed to get recommendations",
+            "message": "An error occurred while fetching recommendations from LexML API.",
+            "debug_info": {
+                "error_type": type(e).__name__,
+                "error_message": str(e)
+            }
+        }), 500
 
 @app.route('/api/admin/db/overview', methods=['GET'])
 def api_admin_db_overview():
@@ -1133,6 +1839,30 @@ def check_db_connection():
         logger.error("SEMANTIC_AVAILABLE is False - semantic retrieval disabled")
     
     logger.info("=============================================")
+
+# Initialize OpenAI client function
+def initialize_openai_client():
+    """Initialize the OpenAI client using the openai_utils manager
+    
+    Returns:
+        bool: True if initialization was successful, False otherwise
+    """
+    try:
+        success = False
+        if openai_manager:
+            success = openai_manager.initialize()
+            if success:
+                logger.info("✅ OpenAI client initialized successfully")
+                return True
+            else:
+                logger.warning(f"❌ OpenAI client initialization failed: {openai_manager.last_error}")
+                return False
+        else:
+            logger.error("❌ OpenAI manager not available")
+            return False
+    except Exception as e:
+        logger.error(f"❌ Error initializing OpenAI client: {type(e).__name__}: {str(e)}")
+        return False
 
 
 if __name__ == '__main__':

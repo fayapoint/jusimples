@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .sidebar {
+            min-height: 100vh;
+            background: linear-gradient(135deg, #2c3e50 0%, #4a6741 100%);
+            color: white;
+        }
+        .sidebar .nav-link {
+            color: rgba(255,255,255,0.8);
+            transition: all 0.3s;
+        }
+        .sidebar .nav-link:hover,
+        .sidebar .nav-link.active {
+            background: rgba(255,255,255,0.1);
+            color: white;
+            border-radius: 8px;
+        }
+        .main-content {
+            background-color: #f8f9fa;
+            min-height: 100vh;
+        }
+        .kb-item {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+        .kb-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+        }
+        .category-badge {
+            border-radius: 20px;
+        }
+        .keyword-tag {
+            background: #e3f2fd;
+            color: #1976d2;
+            border-radius: 12px;
+            padding: 2px 8px;
+            font-size: 0.75rem;
+            margin: 2px;
+            display: inline-block;
+        }
+        .embedding-status {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        .has-embedding { background-color: #4caf50; }
+        .no-embedding { background-color: #f44336; }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <!-- Sidebar -->
+            <nav class="col-md-2 sidebar p-3">
+                <div class="text-center mb-4">
+                    <h3 class="mb-0"><i class="fas fa-balance-scale"></i> JuSimples</h3>
+                    <small class="text-muted">Admin Dashboard v3.0</small>
+                </div>
+                
+                <ul class="nav nav-pills flex-column">
+                    <li class="nav-item mb-2">
+                        <a class="nav-link" href="{{ url_for('admin_v3.dashboard') }}">
+                            <i class="fas fa-tachometer-alt me-2"></i> Dashboard
+                        </a>
+                    </li>
+                    <li class="nav-item mb-2">
+                        <a class="nav-link active" href="{{ url_for('admin_v3.knowledge_base') }}">
+                            <i class="fas fa-book me-2"></i> Knowledge Base
+                        </a>
+                    </li>
+                    <li class="nav-item mb-2">
+                        <a class="nav-link" href="{{ url_for('admin_v3.openai_management') }}">
+                            <i class="fas fa-brain me-2"></i> OpenAI API
+                        </a>
+                    </li>
+                    <li class="nav-item mb-2">
+                        <a class="nav-link" href="{{ url_for('admin_v3.lexml_management') }}">
+                            <i class="fas fa-gavel me-2"></i> LexML API
+                        </a>
+                    </li>
+                    <li class="nav-item mb-2">
+                        <a class="nav-link" href="{{ url_for('admin_v3.rag_system') }}">
+                            <i class="fas fa-search me-2"></i> RAG System
+                        </a>
+                    </li>
+                    <li class="nav-item mb-2">
+                        <a class="nav-link" href="{{ url_for('admin_v3.query_analytics') }}">
+                            <i class="fas fa-chart-line me-2"></i> Query Analytics
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+            
+            <!-- Main Content -->
+            <main class="col-md-10 main-content p-4">
+                <!-- Header -->
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h1 class="h3 mb-0">Knowledge Base Management</h1>
+                    <div>
+                        <button class="btn btn-success me-2" data-bs-toggle="modal" data-bs-target="#addItemModal">
+                            <i class="fas fa-plus"></i> Add Item
+                        </button>
+                        <button class="btn btn-primary me-2" data-bs-toggle="modal" data-bs-target="#lexmlSearchModal">
+                            <i class="fas fa-gavel"></i> Import from LexML
+                        </button>
+                        <button class="btn btn-outline-secondary" onclick="location.reload()">
+                            <i class="fas fa-sync-alt"></i> Refresh
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Statistics Cards -->
+                <div class="row mb-4">
+                    <div class="col-md-3">
+                        <div class="card bg-primary text-white">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <h5 class="card-title">Total Items</h5>
+                                        <h2>{{ items|length }}</h2>
+                                    </div>
+                                    <div class="align-self-center">
+                                        <i class="fas fa-book fa-2x"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-3">
+                        <div class="card bg-success text-white">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <h5 class="card-title">With Embeddings</h5>
+                                        <h2>{{ items|selectattr("has_embedding")|list|length }}</h2>
+                                    </div>
+                                    <div class="align-self-center">
+                                        <i class="fas fa-vector-square fa-2x"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-3">
+                        <div class="card bg-info text-white">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <h5 class="card-title">Categories</h5>
+                                        <h2>{{ category_stats|length }}</h2>
+                                    </div>
+                                    <div class="align-self-center">
+                                        <i class="fas fa-tags fa-2x"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-3">
+                        <div class="card bg-warning text-white">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <h5 class="card-title">Needs Review</h5>
+                                        <h2>{{ items|rejectattr("has_embedding")|list|length }}</h2>
+                                    </div>
+                                    <div class="align-self-center">
+                                        <i class="fas fa-exclamation-triangle fa-2x"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Filter and Search -->
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="fas fa-search"></i></span>
+                                    <input type="text" class="form-control" id="searchInput" placeholder="Search items...">
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <select class="form-select" id="categoryFilter">
+                                    <option value="">All Categories</option>
+                                    {% for category in category_stats.keys() %}
+                                    <option value="{{ category }}">{{ category|title }} ({{ category_stats[category] }})</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <select class="form-select" id="embeddingFilter">
+                                    <option value="">All Items</option>
+                                    <option value="yes">With Embeddings</option>
+                                    <option value="no">Without Embeddings</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Knowledge Base Items -->
+                <div class="row" id="itemsContainer">
+                    {% for item in items %}
+                    <div class="col-md-6 mb-3 kb-item-container" 
+                         data-category="{{ item.category }}" 
+                         data-has-embedding="{{ item.has_embedding|lower }}">
+                        <div class="kb-item p-3" onclick="editItem('{{ item.id }}')">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <h6 class="mb-1 text-primary">{{ item.title }}</h6>
+                                <div class="d-flex align-items-center">
+                                    <span class="embedding-status {{ 'has-embedding' if item.has_embedding else 'no-embedding' }} me-2" 
+                                          title="{{ 'Has embedding' if item.has_embedding else 'No embedding' }}"></span>
+                                    <small class="text-muted">{{ item.updated_at }}</small>
+                                </div>
+                            </div>
+                            
+                            <p class="text-muted small mb-2">{{ item.content }}</p>
+                            
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <span class="badge category-badge bg-secondary">{{ item.category|title }}</span>
+                                    {% if item.law_type %}
+                                    <span class="badge bg-info">{{ item.law_type|title }}</span>
+                                    {% endif %}
+                                </div>
+                                <small class="text-muted">{{ item.source }}</small>
+                            </div>
+                            
+                            {% if item.keywords %}
+                            <div class="mt-2">
+                                {% for keyword in item.keywords[:3] %}
+                                <span class="keyword-tag">{{ keyword }}</span>
+                                {% endfor %}
+                                {% if item.keywords|length > 3 %}
+                                <span class="keyword-tag">+{{ item.keywords|length - 3 }} more</span>
+                                {% endif %}
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </main>
+        </div>
+    </div>
+    
+    <!-- Add Item Modal -->
+    <div class="modal fade" id="addItemModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add Knowledge Base Item</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="addItemForm">
+                        <div class="row">
+                            <div class="col-md-8">
+                                <div class="mb-3">
+                                    <label class="form-label">Title</label>
+                                    <input type="text" class="form-control" name="title" required>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label class="form-label">Category</label>
+                                    <select class="form-select" name="category" required>
+                                        <option value="direitos_fundamentais">Direitos Fundamentais</option>
+                                        <option value="responsabilidade_civil">Responsabilidade Civil</option>
+                                        <option value="direito_consumidor">Direito do Consumidor</option>
+                                        <option value="direito_trabalho">Direito do Trabalho</option>
+                                        <option value="advocacia">Advocacia</option>
+                                        <option value="legislacao">Legislação</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Content</label>
+                            <textarea class="form-control" name="content" rows="6" required></textarea>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">Keywords (comma separated)</label>
+                                    <input type="text" class="form-control" name="keywords" placeholder="keyword1, keyword2, keyword3">
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">Source</label>
+                                    <input type="text" class="form-control" name="source" placeholder="e.g., Código Civil">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label class="form-label">Law Type</label>
+                                    <select class="form-select" name="law_type">
+                                        <option value="">Select Type</option>
+                                        <option value="constitutional">Constitutional</option>
+                                        <option value="civil">Civil</option>
+                                        <option value="criminal">Criminal</option>
+                                        <option value="commercial">Commercial</option>
+                                        <option value="labor">Labor</option>
+                                        <option value="administrative">Administrative</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label class="form-label">Jurisdiction</label>
+                                    <select class="form-select" name="jurisdiction">
+                                        <option value="BR">Brazil</option>
+                                        <option value="SP">São Paulo</option>
+                                        <option value="RJ">Rio de Janeiro</option>
+                                        <option value="MG">Minas Gerais</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label class="form-label">Complexity Level</label>
+                                    <select class="form-select" name="complexity_level">
+                                        <option value="basic">Basic</option>
+                                        <option value="medium" selected>Medium</option>
+                                        <option value="advanced">Advanced</option>
+                                        <option value="expert">Expert</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="saveItem()">Save Item</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- LexML Search Modal -->
+    <div class="modal fade" id="lexmlSearchModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Import from LexML</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="lexmlSearchForm">
+                        <div class="row">
+                            <div class="col-md-8">
+                                <div class="mb-3">
+                                    <label class="form-label">Search Query</label>
+                                    <input type="text" class="form-control" name="query" placeholder="e.g., direitos do consumidor" required>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label class="form-label">Law Type</label>
+                                    <select class="form-select" name="law_type">
+                                        <option value="lei">Lei</option>
+                                        <option value="decreto">Decreto</option>
+                                        <option value="constituicao">Constituição</option>
+                                        <option value="codigo">Código</option>
+                                        <option value="regulamento">Regulamento</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <button type="button" class="btn btn-primary" onclick="searchLexML()">
+                            <i class="fas fa-search"></i> Search and Import
+                        </button>
+                    </form>
+                    <div id="lexmlResults" class="mt-3"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Search and filter functionality
+        document.getElementById('searchInput').addEventListener('input', filterItems);
+        document.getElementById('categoryFilter').addEventListener('change', filterItems);
+        document.getElementById('embeddingFilter').addEventListener('change', filterItems);
+        
+        function filterItems() {
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            const categoryFilter = document.getElementById('categoryFilter').value;
+            const embeddingFilter = document.getElementById('embeddingFilter').value;
+            
+            const containers = document.querySelectorAll('.kb-item-container');
+            
+            containers.forEach(container => {
+                const item = container.querySelector('.kb-item');
+                const title = item.querySelector('h6').textContent.toLowerCase();
+                const content = item.querySelector('p').textContent.toLowerCase();
+                const category = container.dataset.category;
+                const hasEmbedding = container.dataset.hasEmbedding;
+                
+                let show = true;
+                
+                // Text search
+                if (searchTerm && !title.includes(searchTerm) && !content.includes(searchTerm)) {
+                    show = false;
+                }
+                
+                // Category filter
+                if (categoryFilter && category !== categoryFilter) {
+                    show = false;
+                }
+                
+                // Embedding filter
+                if (embeddingFilter === 'yes' && hasEmbedding !== 'true') {
+                    show = false;
+                }
+                if (embeddingFilter === 'no' && hasEmbedding !== 'false') {
+                    show = false;
+                }
+                
+                container.style.display = show ? 'block' : 'none';
+            });
+        }
+        
+        // Edit item functionality
+        function editItem(itemId) {
+            alert('Edit functionality will open a detailed editor for item: ' + itemId);
+            // TODO: Implement detailed item editor
+        }
+        
+        // Save new item
+        function saveItem() {
+            const form = document.getElementById('addItemForm');
+            const formData = new FormData(form);
+            
+            // Convert keywords string to array
+            const keywordsString = formData.get('keywords');
+            const keywords = keywordsString ? keywordsString.split(',').map(k => k.trim()) : [];
+            
+            const itemData = {
+                title: formData.get('title'),
+                content: formData.get('content'),
+                category: formData.get('category'),
+                keywords: keywords,
+                source: formData.get('source'),
+                law_type: formData.get('law_type'),
+                jurisdiction: formData.get('jurisdiction'),
+                complexity_level: formData.get('complexity_level')
+            };
+            
+            console.log('Saving item:', itemData);
+            alert('Save functionality will be implemented to add this item to the knowledge base.');
+            // TODO: Implement save functionality
+        }
+        
+        // Search LexML
+        function searchLexML() {
+            const form = document.getElementById('lexmlSearchForm');
+            const formData = new FormData(form);
+            
+            const searchData = {
+                query: formData.get('query'),
+                law_type: formData.get('law_type')
+            };
+            
+            document.getElementById('lexmlResults').innerHTML = '<div class="text-center"><div class="spinner-border" role="status"></div><p class="mt-2">Searching LexML...</p></div>';
+            
+            fetch('/admin/v3/api/lexml/search', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(searchData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    document.getElementById('lexmlResults').innerHTML = `
+                        <div class="alert alert-success">
+                            <i class="fas fa-check-circle me-2"></i>
+                            ${data.message}
+                        </div>
+                    `;
+                    setTimeout(() => {
+                        location.reload();
+                    }, 2000);
+                } else {
+                    document.getElementById('lexmlResults').innerHTML = `
+                        <div class="alert alert-danger">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            Error: ${data.error}
+                        </div>
+                    `;
+                }
+            })
+            .catch(error => {
+                document.getElementById('lexmlResults').innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        Network error: ${error.message}
+                    </div>
+                `;
+            });
+        }
+    </script>
+</body>
+</html>

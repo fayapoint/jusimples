@@ -137,7 +137,9 @@ class AdminDashboard {
             monitoring: 'System Monitoring',
             users: 'User Management',
             logs: 'System Logs',
-            settings: 'System Settings'
+            settings: 'System Settings',
+            openai: 'OpenAI Dashboard',
+            lextml: 'LexML API'
         };
 
         const titleElement = document.getElementById('page-title');
@@ -161,7 +163,9 @@ class AdminDashboard {
             monitoring: () => this.loadMonitoringContent(),
             users: () => this.loadUsersContent(),
             logs: () => this.loadLogsContent(),
-            settings: () => this.loadSettingsContent()
+            settings: () => this.loadSettingsContent(),
+            openai: () => this.loadOpenAIContent(),
+            lextml: () => this.loadLexMLContent()
         };
 
         if (loaders[pageName]) {
@@ -1446,53 +1450,20 @@ class AdminDashboard {
     }
 
     async loadLogsContent() {
-        const res = await fetch('/admin/api/logs');
-        const data = await res.json();
-        this.logsState.entries = data.entries || [];
-        this.logsState.page = 1; this.logsState.search=''; this.logsState.level='all';
-        const c = document.getElementById('logs-content');
-        if (!c) return;
-        c.innerHTML = `
-          <div class="card">
-            <div class="toolbar">
-              <div class="controls">
-                <input id="logs-search" class="form-input" placeholder="Search logs..." />
-                <select id="logs-level" class="form-select">
-                  <option value="all">All</option>
-                  <option value="INFO">INFO</option>
-                  <option value="WARNING">WARNING</option>
-                  <option value="ERROR">ERROR</option>
-                </select>
-              </div>
-              <div class="controls">
-                <button id="logs-export" class="btn btn-secondary btn-sm"><i class="fas fa-file-export"></i> Export</button>
-              </div>
-            </div>
-            <table class="data-table">
-              <thead><tr>
-                <th class="sortable" data-sort="timestamp">Time</th>
-                <th class="sortable" data-sort="level">Level</th>
-                <th class="sortable" data-sort="message">Message</th>
-              </tr></thead>
-              <tbody id="logs-tbody"></tbody>
-            </table>
-            <div class="toolbar"><div></div><div id="logs-pagination" class="pagination"></div></div>
-          </div>`;
-        this.applyLogsFilters();
-        c.querySelector('#logs-search').addEventListener('input', this.debounce((e)=>{ this.logsState.search = e.target.value.trim().toLowerCase(); this.logsState.page=1; this.applyLogsFilters(); }, 300));
-        c.querySelector('#logs-level').addEventListener('change', (e)=>{ this.logsState.level = e.target.value; this.logsState.page=1; this.applyLogsFilters(); });
-        c.querySelector('#logs-export').addEventListener('click', async ()=>{ const r = await fetch('/admin/api/export/logs'); const j = await r.json(); if (r.ok && j.downloadUrl) window.open(j.downloadUrl, '_blank'); else this.showNotification(j.error || 'Export failed', 'error'); });
-        c.querySelectorAll('th.sortable').forEach(th => {
-            th.style.cursor = 'pointer';
-            th.addEventListener('click', ()=>{
-                const k = th.getAttribute('data-sort');
-                if (!k) return;
-                if (this.logsState.sort.key === k) this.logsState.sort.dir = (this.logsState.sort.dir === 'asc' ? 'desc' : 'asc');
-                else this.logsState.sort = { key: k, dir: 'asc' };
-                this.logsState.page = 1;
-                this.applyLogsFilters();
+        try {
+            // The logs panel JS will handle the logs loading and display
+            // This just triggers a custom event to notify the logs panel that the logs page is active
+            const event = new CustomEvent('pageChanged', { 
+                detail: { page: 'logs' }
             });
-        });
+            document.dispatchEvent(event);
+            
+            // Update recent activity on the logs page
+            const recentActivity = await adminApi.getRecentActivity();
+            this.updateRecentActivity(recentActivity.activity || []);
+        } catch (error) {
+            console.error('Error loading logs content:', error);
+        }
     }
 
     async loadSettingsContent() {
@@ -1790,6 +1761,451 @@ class AdminDashboard {
         const pages = Math.max(1, Math.ceil(filtered.length/this.usersState.pageSize));
         pag.innerHTML = Array.from({length: pages}, (_,i)=>`<button class="page-btn ${i+1===this.usersState.page?'active':''}" data-p="${i+1}">${i+1}</button>`).join('');
         pag.querySelectorAll('.page-btn').forEach(b=> b.addEventListener('click', ()=>{ this.usersState.page = parseInt(b.dataset.p,10); this.applyUsersFilters(); }));
+    }
+    
+    async loadOpenAIContent() {
+        try {
+            const c = document.getElementById('openai-content');
+            if (!c) return;
+            
+            // Show loading state
+            c.innerHTML = '<div class="loading"><i class="fas fa-spinner fa-spin"></i> Loading OpenAI dashboard...</div>';
+            
+            // Fetch OpenAI configuration and stats
+            const res = await fetch('/admin-v2/api/openai/status');
+            const data = await res.json();
+            
+            if (!res.ok) throw new Error(data.error || 'Failed to load OpenAI dashboard');
+            
+            // Create dashboard content
+            c.innerHTML = `
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon bg-primary">
+                            <i class="fas fa-key"></i>
+                        </div>
+                        <div class="stat-content">
+                            <div class="stat-label">API Status</div>
+                            <div class="stat-value">${data.status ? '<span class="badge success">Active</span>' : '<span class="badge danger">Inactive</span>'}</div>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon bg-success">
+                            <i class="fas fa-terminal"></i>
+                        </div>
+                        <div class="stat-content">
+                            <div class="stat-label">Model</div>
+                            <div class="stat-value">${data.model || 'Unknown'}</div>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon bg-info">
+                            <i class="fas fa-coins"></i>
+                        </div>
+                        <div class="stat-content">
+                            <div class="stat-label">Tokens Used</div>
+                            <div class="stat-value">${data.totalTokens?.toLocaleString() || '0'}</div>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon bg-warning">
+                            <i class="fas fa-tachometer-alt"></i>
+                        </div>
+                        <div class="stat-content">
+                            <div class="stat-label">Avg Response Time</div>
+                            <div class="stat-value">${data.avgResponseTime || '0ms'}</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card mt-4">
+                    <div class="card-header">
+                        <div class="card-title"><i class="fas fa-cog"></i> API Configuration</div>
+                    </div>
+                    <div class="card-body">
+                        <form id="openai-config-form">
+                            <div class="form-group">
+                                <label>API Key</label>
+                                <div class="input-group">
+                                    <input type="password" id="openai-api-key" class="form-input" value="${data.hasApiKey ? '••••••••••••••••••••••••••' : ''}" placeholder="Enter OpenAI API Key">
+                                    <button type="button" class="btn btn-secondary" id="toggle-api-key">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+                                </div>
+                                <small class="form-text">Your API key is encrypted and stored securely.</small>
+                            </div>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save"></i> Save Configuration
+                            </button>
+                        </form>
+                    </div>
+                </div>
+                
+                <div class="card mt-4">
+                    <div class="card-header">
+                        <div class="card-title"><i class="fas fa-chart-bar"></i> Usage Stats</div>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="openai-usage-chart" style="width:100%; height:300px;"></canvas>
+                    </div>
+                </div>
+                
+                <div class="card mt-4">
+                    <div class="card-header">
+                        <div class="card-title"><i class="fas fa-exclamation-triangle"></i> Recent Errors</div>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-container">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>Time</th>
+                                        <th>Error</th>
+                                        <th>Details</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="openai-errors-tbody">
+                                    ${data.errors && data.errors.length > 0 ? 
+                                        data.errors.map(err => `<tr>
+                                            <td>${err.timestamp || 'Unknown'}</td>
+                                            <td>${err.error || 'Unknown error'}</td>
+                                            <td>${err.details || 'No details'}</td>
+                                        </tr>`).join('') : 
+                                        '<tr><td colspan="3" class="text-center">No recent errors</td></tr>'
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Set up event handlers
+            const toggleBtn = document.getElementById('toggle-api-key');
+            const apiKeyInput = document.getElementById('openai-api-key');
+            if (toggleBtn && apiKeyInput) {
+                toggleBtn.addEventListener('click', () => {
+                    const type = apiKeyInput.getAttribute('type');
+                    apiKeyInput.setAttribute('type', type === 'password' ? 'text' : 'password');
+                    toggleBtn.innerHTML = `<i class="fas fa-${type === 'password' ? 'eye-slash' : 'eye'}"></i>`;
+                });
+            }
+            
+            const form = document.getElementById('openai-config-form');
+            if (form) {
+                form.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    const apiKey = document.getElementById('openai-api-key').value;
+                    if (!apiKey) {
+                        this.showNotification('API key is required', 'error');
+                        return;
+                    }
+                    
+                    try {
+                        this.showNotification('Updating API configuration...', 'info');
+                        const res = await fetch('/admin-v2/api/openai/config', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ api_key: apiKey })
+                        });
+                        
+                        const result = await res.json();
+                        if (res.ok) {
+                            this.showNotification(result.message || 'API configuration updated', 'success');
+                            setTimeout(() => this.loadOpenAIContent(), 1000);
+                        } else {
+                            this.showNotification(result.error || 'Failed to update configuration', 'error');
+                        }
+                    } catch (error) {
+                        console.error('Error updating OpenAI config:', error);
+                        this.showNotification('An error occurred while updating configuration', 'error');
+                    }
+                });
+            }
+            
+            // Initialize charts if data is available
+            if (data.usageHistory && window.Chart) {
+                const ctx = document.getElementById('openai-usage-chart')?.getContext('2d');
+                if (ctx) {
+                    new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: data.usageHistory.map(entry => entry.date),
+                            datasets: [{
+                                label: 'Tokens Used',
+                                data: data.usageHistory.map(entry => entry.tokens),
+                                backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                                borderColor: 'rgba(54, 162, 235, 1)',
+                                borderWidth: 1,
+                                tension: 0.4
+                            }]
+                        },
+                        options: {
+                            scales: {
+                                y: { beginAtZero: true }
+                            },
+                            responsive: true,
+                            maintainAspectRatio: false
+                        }
+                    });
+                }
+            }
+        } catch (error) {
+            console.error('Error loading OpenAI dashboard:', error);
+            const c = document.getElementById('openai-content');
+            if (c) {
+                c.innerHTML = `
+                <div class="error-state">
+                    <div class="error-icon">
+                        <i class="fas fa-exclamation-circle"></i>
+                    </div>
+                    <div class="error-message">
+                        <h3>Failed to load OpenAI dashboard</h3>
+                        <p>${error.message || 'An unknown error occurred'}</p>
+                    </div>
+                    <button onclick="dashboard.loadOpenAIContent()" class="btn btn-primary">
+                        <i class="fas fa-refresh"></i> Retry
+                    </button>
+                </div>`;
+            }
+        }
+    }
+    
+    async loadLexMLContent() {
+        try {
+            const c = document.getElementById('lextml-content');
+            if (!c) return;
+            
+            // Show loading state
+            c.innerHTML = '<div class="loading"><i class="fas fa-spinner fa-spin"></i> Loading LexML API data...</div>';
+            
+            // Fetch LexML API data
+            const res = await fetch('/admin-v2/api/lextml/status');
+            const data = await res.json();
+            
+            if (!res.ok) throw new Error(data.error || 'Failed to load LexML API data');
+            
+            // Create dashboard content
+            c.innerHTML = `
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon bg-primary">
+                            <i class="fas fa-balance-scale"></i>
+                        </div>
+                        <div class="stat-content">
+                            <div class="stat-label">API Status</div>
+                            <div class="stat-value">${data.status ? '<span class="badge success">Available</span>' : '<span class="badge danger">Unavailable</span>'}</div>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon bg-success">
+                            <i class="fas fa-search"></i>
+                        </div>
+                        <div class="stat-content">
+                            <div class="stat-label">Total Queries</div>
+                            <div class="stat-value">${data.totalQueries?.toLocaleString() || '0'}</div>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon bg-info">
+                            <i class="fas fa-database"></i>
+                        </div>
+                        <div class="stat-content">
+                            <div class="stat-label">Available Documents</div>
+                            <div class="stat-value">${data.documentCount?.toLocaleString() || '0'}</div>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon bg-warning">
+                            <i class="fas fa-clock"></i>
+                        </div>
+                        <div class="stat-content">
+                            <div class="stat-label">Avg Response Time</div>
+                            <div class="stat-value">${data.avgResponseTime || '0ms'}</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card mt-4">
+                    <div class="card-header">
+                        <div class="card-title"><i class="fas fa-search"></i> LexML Search</div>
+                    </div>
+                    <div class="card-body">
+                        <form id="lextml-search-form">
+                            <div class="form-group">
+                                <label>Search Legal Documents</label>
+                                <div class="input-group">
+                                    <input type="text" id="lextml-search-input" class="form-input" placeholder="Enter search query...">
+                                    <button type="submit" class="btn btn-primary">
+                                        <i class="fas fa-search"></i> Search
+                                    </button>
+                                </div>
+                                <small class="form-text">Search for legal documents, provisions, jurisprudence, etc.</small>
+                            </div>
+                        </form>
+                        <div id="lextml-search-results" class="mt-4" style="display:none;">
+                            <h4>Search Results</h4>
+                            <div class="table-container">
+                                <table class="table">
+                                    <thead>
+                                        <tr>
+                                            <th>Document</th>
+                                            <th>Type</th>
+                                            <th>Date</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="lextml-results-tbody">
+                                        <!-- Results will be populated here -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card mt-4">
+                    <div class="card-header">
+                        <div class="card-title"><i class="fas fa-plus-circle"></i> Add Document to LexML</div>
+                    </div>
+                    <div class="card-body">
+                        <form id="lextml-add-form">
+                            <div class="form-group">
+                                <label>Document Title</label>
+                                <input type="text" id="lextml-doc-title" class="form-input" placeholder="Enter document title">
+                            </div>
+                            <div class="form-group">
+                                <label>Document Type</label>
+                                <select id="lextml-doc-type" class="form-select">
+                                    <option value="">Select document type</option>
+                                    <option value="law">Law</option>
+                                    <option value="decree">Decree</option>
+                                    <option value="resolution">Resolution</option>
+                                    <option value="jurisprudence">Jurisprudence</option>
+                                    <option value="other">Other</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Document Content</label>
+                                <textarea id="lextml-doc-content" class="form-textarea" rows="6" placeholder="Enter document content"></textarea>
+                            </div>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save"></i> Add Document
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            `;
+            
+            // Set up event handlers for search form
+            const searchForm = document.getElementById('lextml-search-form');
+            if (searchForm) {
+                searchForm.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    const query = document.getElementById('lextml-search-input').value;
+                    if (!query) {
+                        this.showNotification('Please enter a search query', 'warning');
+                        return;
+                    }
+                    
+                    try {
+                        this.showNotification('Searching...', 'info');
+                        const res = await fetch('/admin-v2/api/lextml/search', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ query })
+                        });
+                        
+                        const results = await res.json();
+                        const resultsContainer = document.getElementById('lextml-search-results');
+                        const tbody = document.getElementById('lextml-results-tbody');
+                        
+                        if (resultsContainer && tbody) {
+                            resultsContainer.style.display = 'block';
+                            
+                            if (results.documents && results.documents.length > 0) {
+                                tbody.innerHTML = results.documents.map(doc => `
+                                    <tr>
+                                        <td>${doc.title || 'Untitled'}</td>
+                                        <td>${doc.type || 'Unknown'}</td>
+                                        <td>${doc.date || '-'}</td>
+                                        <td>
+                                            <button class="btn btn-sm btn-primary" onclick="dashboard.viewDocument('${doc.id}')"><i class="fas fa-eye"></i></button>
+                                        </td>
+                                    </tr>
+                                `).join('');
+                            } else {
+                                tbody.innerHTML = '<tr><td colspan="4" class="text-center">No documents found</td></tr>';
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Error searching LexML:', error);
+                        this.showNotification('An error occurred during search', 'error');
+                    }
+                });
+            }
+            
+            // Set up event handlers for add form
+            const addForm = document.getElementById('lextml-add-form');
+            if (addForm) {
+                addForm.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    const title = document.getElementById('lextml-doc-title').value;
+                    const type = document.getElementById('lextml-doc-type').value;
+                    const content = document.getElementById('lextml-doc-content').value;
+                    
+                    if (!title || !type || !content) {
+                        this.showNotification('All fields are required', 'warning');
+                        return;
+                    }
+                    
+                    try {
+                        this.showNotification('Adding document...', 'info');
+                        const res = await fetch('/admin-v2/api/lextml/add', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ title, type, content })
+                        });
+                        
+                        const result = await res.json();
+                        if (res.ok) {
+                            this.showNotification(result.message || 'Document added successfully', 'success');
+                            addForm.reset();
+                        } else {
+                            this.showNotification(result.error || 'Failed to add document', 'error');
+                        }
+                    } catch (error) {
+                        console.error('Error adding document:', error);
+                        this.showNotification('An error occurred while adding document', 'error');
+                    }
+                });
+            }
+        } catch (error) {
+            console.error('Error loading LexML API content:', error);
+            const c = document.getElementById('lextml-content');
+            if (c) {
+                c.innerHTML = `
+                <div class="error-state">
+                    <div class="error-icon">
+                        <i class="fas fa-exclamation-circle"></i>
+                    </div>
+                    <div class="error-message">
+                        <h3>Failed to load LexML API data</h3>
+                        <p>${error.message || 'An unknown error occurred'}</p>
+                    </div>
+                    <button onclick="dashboard.loadLexMLContent()" class="btn btn-primary">
+                        <i class="fas fa-refresh"></i> Retry
+                    </button>
+                </div>`;
+            }
+        }
+    }
+    
+    viewDocument(docId) {
+        // This is a stub for viewing LexML documents
+        // Implement as needed based on backend capabilities
+        alert(`Viewing document with ID: ${docId}`);
+        // In a real implementation, you would fetch the document and show in a modal
     }
 }
 

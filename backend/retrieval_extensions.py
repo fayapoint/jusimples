@@ -93,6 +93,18 @@ def get_rag_performance_metrics(days: int = 7, conn=None) -> Dict[str, Any]:
         return {}
     
     try:
+        # First ensure the necessary columns exist
+        with conn.cursor() as cur:
+            try:
+                # Add error_message column to ask_logs if it doesn't exist
+                cur.execute("""
+                    ALTER TABLE ask_logs ADD COLUMN IF NOT EXISTS error_message TEXT;
+                """)
+                conn.commit()
+                LOGGER.info("✅ Added error_message column to ask_logs table")
+            except Exception as schema_e:
+                LOGGER.warning(f"Schema update failed: {schema_e}")
+        
         with conn.cursor() as cur:
             # Vector search performance
             cur.execute("""
@@ -138,19 +150,23 @@ def get_rag_performance_metrics(days: int = 7, conn=None) -> Dict[str, Any]:
             
             context_metrics = cur.fetchone()
             
-            # Popular failure patterns
-            cur.execute("""
-                SELECT error_message, COUNT(*) as error_count
-                FROM ask_logs 
-                WHERE created_at > now() - interval '%s days' 
-                AND success = false 
-                AND error_message IS NOT NULL
-                GROUP BY error_message 
-                ORDER BY error_count DESC 
-                LIMIT 5
-            """, (days,))
-            
-            error_patterns = [{"error": row[0], "count": int(row[1])} for row in cur.fetchall()]
+            # Popular failure patterns - handle case where error_message column might not exist yet
+            try:
+                cur.execute("""
+                    SELECT error_message, COUNT(*) as error_count
+                    FROM ask_logs 
+                    WHERE created_at > now() - interval '%s days' 
+                    AND success = false 
+                    AND error_message IS NOT NULL
+                    GROUP BY error_message 
+                    ORDER BY error_count DESC 
+                    LIMIT 5
+                """, (days,))
+                
+                error_patterns = [{"error": row[0], "count": int(row[1])} for row in cur.fetchall()]
+            except Exception as error_query_e:
+                LOGGER.warning(f"Error fetching failure patterns: {error_query_e}")
+                error_patterns = []
             
             return {
                 "vector_search": {

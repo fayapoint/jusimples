@@ -5,12 +5,17 @@ Quick database connection test for JuSimples admin dashboard
 import os
 import sys
 import logging
+import json
 from pathlib import Path
 
 # Add current directory to path to import local modules
 sys.path.insert(0, str(Path(__file__).parent))
 
-from retrieval import init_pgvector, is_ready, get_db_status, admin_db_overview
+# Import from our new db_utils module
+try:
+    from backend.db_utils import get_db_manager, is_ready, initialize_schema
+except ImportError:
+    from db_utils import get_db_manager, is_ready, initialize_schema
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -19,7 +24,7 @@ logger = logging.getLogger(__name__)
 def test_database_connection():
     """Test the database connection and report status"""
     print("=" * 50)
-    print("JuSimples Database Connection Test")
+    print("JuSimples Database Connection Test (Using db_utils)")
     print("=" * 50)
     
     # Check environment variables
@@ -40,9 +45,11 @@ def test_database_connection():
     # Test connection initialization
     print("\n2. Database Connection Test:")
     try:
-        print("   Attempting to initialize pgvector...")
-        success = init_pgvector()
-        print(f"   Connection initialization: {'✓ Success' if success else '✗ Failed'}")
+        # Get database manager instance
+        db_manager = get_db_manager()
+        print("   Attempting to initialize database schema...")
+        success = initialize_schema()
+        print(f"   Schema initialization: {'✓ Success' if success else '✗ Failed'}")
         
         # Test if ready
         ready = is_ready()
@@ -50,25 +57,56 @@ def test_database_connection():
         
         if ready:
             print("\n3. Database Status:")
-            status = get_db_status()
-            print(f"   PostgreSQL Version: {status.get('version', 'unknown')}")
-            print(f"   Database Name: {status.get('database_name', 'unknown')}")
-            print(f"   User: {status.get('user', 'unknown')}")
-            print(f"   Vector Extension: {'✓ Installed' if status.get('vector_ready') else '✗ Not available'}")
-            print(f"   Extensions: {', '.join(status.get('extensions', []))}")
+            # Get database status
+            try:
+                conn = db_manager.get_connection()
+                with conn.cursor() as cur:
+                    # Get PostgreSQL version
+                    cur.execute("SELECT version();")
+                    version_info = cur.fetchone()
+                    version = version_info[0] if version_info else "unknown"
+                    print(f"   PostgreSQL Version: {version}")
+                    
+                    # Get database name and user
+                    cur.execute("SELECT current_database(), current_user;")
+                    db_info = cur.fetchone()
+                    if db_info:
+                        print(f"   Database Name: {db_info[0]}")
+                        print(f"   User: {db_info[1]}")
+                    
+                    # Check vector extension
+                    cur.execute("SELECT name FROM pg_available_extensions WHERE installed_version IS NOT NULL AND name = 'vector';")
+                    vector_available = cur.fetchone() is not None
+                    print(f"   Vector Extension: {'✓ Installed' if vector_available else '✗ Not available'}")
+                    
+                    # List extensions
+                    cur.execute("SELECT name FROM pg_available_extensions WHERE installed_version IS NOT NULL;")
+                    extensions = [ext[0] for ext in cur.fetchall()]
+                    print(f"   Extensions: {', '.join(extensions)}")
+            except Exception as e:
+                print(f"   Could not fetch database status: {e}")
             
             print("\n4. Database Overview:")
-            overview = admin_db_overview()
+            overview = db_manager.admin_db_overview()
             counts = overview.get('counts', {})
             print(f"   Legal Chunks: {counts.get('legal_chunks', 0)}")
             print(f"   Search Logs: {counts.get('search_logs', 0)}")
             print(f"   Ask Logs: {counts.get('ask_logs', 0)}")
             
-            categories = overview.get('categories', [])
-            if categories:
-                print(f"   Categories: {len(categories)} found")
-                for cat in categories[:5]:  # Show top 5
-                    print(f"     - {cat.get('category', 'Unknown')}: {cat.get('count', 0)} docs")
+            # Check vector status
+            vector_status = overview.get('vector_status', {})
+            print(f"   Vector Status:")
+            print(f"     - Embedded Documents: {vector_status.get('embedded_docs', 0)}")
+            print(f"     - Missing Embeddings: {vector_status.get('missing_embeddings', 0)}")
+            print(f"     - Embedding Coverage: {vector_status.get('embedding_coverage', 0)}%")
+            
+            # Get recent queries
+            recent_queries = overview.get('recent_queries', [])
+            if recent_queries:
+                print(f"   Recent Queries: {len(recent_queries)} found")
+                for i, query in enumerate(recent_queries[:3]):
+                    status = "✓" if query.get('success', True) else "✗"
+                    print(f"     - {status} {query.get('query', 'Unknown')}")
         else:
             print("\n3. Connection Failed - Admin Dashboard will use mock data")
             print("   This is why you're seeing sample/fake data instead of real data")

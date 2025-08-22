@@ -1,0 +1,156 @@
+/* JuSimples Admin Logs Styling */
+
+/* Tabs navigation */
+.tab-navigation {
+    display: flex;
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 1rem;
+}
+
+.tab-btn {
+    padding: 0.5rem 1rem;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s ease;
+}
+
+.tab-btn:hover {
+    color: var(--primary-color);
+}
+
+.tab-btn.active {
+    color: var(--primary-color);
+    border-bottom: 2px solid var(--primary-color);
+    font-weight: 500;
+}
+
+/* Content tabs */
+.logs-content-tab {
+    display: none;
+}
+
+.logs-content-tab.active {
+    display: block;
+}
+
+/* Logs filters */
+.logs-filters {
+    margin-bottom: 1rem;
+    padding: 1rem;
+    background: var(--card-bg-secondary);
+    border-radius: var(--border-radius);
+}
+
+.filters-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.filter-group {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* Logs tables */
+.logs-container {
+    margin-bottom: 1rem;
+    max-height: 600px;
+    overflow-y: auto;
+}
+
+.logs-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.logs-table th {
+    background: var(--card-bg-secondary);
+    padding: 0.75rem;
+    text-align: left;
+    font-weight: 500;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+
+.logs-table td {
+    padding: 0.75rem;
+    border-bottom: 1px solid var(--border-color);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 300px;
+}
+
+.logs-table td:nth-child(2) {
+    max-width: 300px;
+}
+
+.logs-table tr:hover {
+    background-color: var(--hover-color);
+}
+
+/* Pagination */
+.logs-pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+#search-logs-page-indicator,
+#ask-logs-page-indicator {
+    min-width: 100px;
+    text-align: center;
+}
+
+/* Status badges */
+.badge {
+    display: inline-block;
+    padding: 0.25em 0.5em;
+    border-radius: 0.25rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.badge.success {
+    background-color: rgba(var(--success-rgb), 0.2);
+    color: var(--success-color);
+}
+
+.badge.error {
+    background-color: rgba(var(--danger-rgb), 0.2);
+    color: var(--danger-color);
+}
+
+.badge.warning {
+    background-color: rgba(var(--warning-rgb), 0.2);
+    color: var(--warning-color);
+}
+
+/* Empty state */
+.empty-state {
+    padding: 2rem;
+    text-align: center;
+    color: var(--text-secondary);
+    font-style: italic;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .filters-row {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+    
+    .logs-table {
+        display: block;
+        overflow-x: auto;
+    }
+}
