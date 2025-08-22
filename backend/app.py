@@ -738,6 +738,11 @@ def get_health():
         "database_status": "connected" if db_manager.is_ready() else "disconnected"
     })
 
+@app.route('/health')
+def health_alias():
+    # Alias for platform healthchecks (e.g., Railway)
+    return get_health()
+
 @app.route('/api/ask', methods=['POST'])
 def ask_question():
     start_time = time.time()
