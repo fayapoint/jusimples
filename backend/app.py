@@ -169,9 +169,7 @@ if is_openai_available():
 else:
     logger.warning("❌ OpenAI client initialization failed. Check API key configuration.")
 
-# Create aliases for compatibility with existing code
-client = openai_manager.client
-active_model = openai_manager.active_model
+
 
 # Import our db_utils module
 try:
@@ -737,7 +735,7 @@ def ask_question():
             min_relevance = 0.5
         
         logger.info(f"Received question request: {question[:100] if question else 'No question provided'}")
-        logger.info(f"OpenAI client status: {'Available' if client else 'Not available'}")
+        logger.info(f"OpenAI client status: {'Available' if is_openai_available() else 'Not available'}")
         
         if not question:
             logger.warning("No question provided in request")
@@ -751,9 +749,24 @@ def ask_question():
         
         # Search relevant legal knowledge (semantic preferred)
         relevant_context, search_type = retrieve_context(question, top_k=top_k)
-        # Apply relevance filtering only for semantic results
+        
+        # Normalize scores to a common 'relevance' key and defensively filter
+        normalized_context = []
+        for it in (relevant_context or []):
+            try:
+                rel_val = it.get("relevance", it.get("score", 0.0))
+                rel = float(rel_val) if rel_val is not None else 0.0
+            except (ValueError, TypeError):
+                rel = 0.0
+            new_it = it.copy()
+            new_it["relevance"] = rel
+            normalized_context.append(new_it)
+        relevant_context = normalized_context
+        
+        # Apply threshold only for semantic results
         if search_type == "semantic":
-            relevant_context = [it for it in relevant_context if float(it.get("relevance", 0.0)) >= min_relevance]
+            relevant_context = [it for it in relevant_context if it.get("relevance", 0.0) >= min_relevance]
+        
         logger.info(f"Found {len(relevant_context)} relevant documents via {search_type}")
         
         # Generate AI response
@@ -787,7 +800,7 @@ def ask_question():
             logprobs = None
             
             # Estimate token usage and cost based on text length (OpenAI response object not available here)
-            if tokens_used == 0 and client and ai_answer and "Erro" not in ai_answer:
+            if tokens_used == 0 and is_openai_available() and ai_answer and "Erro" not in ai_answer:
                 # Rough estimation: ~4 characters per token
                 estimated_input_tokens = len(question) // 4 + sum(len(doc.get('content', '')) for doc in relevant_context) // 4
                 estimated_output_tokens = len(ai_answer) // 4
@@ -796,7 +809,7 @@ def ask_question():
                 output_tokens = estimated_output_tokens
                 
                 # Calculate cost based on model
-                model_for_cost = active_model or 'gpt-4o-mini'
+                model_for_cost = (openai_manager.active_model or 'gpt-4o-mini')
                 if 'gpt-4o-mini' in model_for_cost.lower():
                     llm_cost = (input_tokens * 0.00015 / 1000) + (output_tokens * 0.0006 / 1000)
                 elif 'gpt-4o' in model_for_cost.lower():
@@ -808,7 +821,7 @@ def ask_question():
                     llm_cost = (input_tokens * 0.00015 / 1000) + (output_tokens * 0.0006 / 1000)
                 
                 # Set model used
-                model_used = active_model or 'gpt-4o-mini'
+                model_used = (openai_manager.active_model or 'gpt-4o-mini')
             
             # ALWAYS LOG TO DATABASE IF AVAILABLE
             if SEMANTIC_AVAILABLE:
@@ -831,7 +844,7 @@ def ask_question():
                         session_id=session_id,
                         user_id=user_id,
                         response_time_ms=int(processing_time * 1000) if processing_time else 0,
-                        llm_model=model_used or active_model,
+                        llm_model=model_used or openai_manager.active_model,
                         llm_tokens_used=tokens_used,
                         llm_cost=llm_cost,
                         user_agent=request.headers.get('User-Agent', ''),
@@ -877,26 +890,29 @@ def ask_question():
             "sources": [
                 {
                     "id": item.get("id"),
-                    "title": item["title"],
-                    "category": item["category"],
-                    "content_preview": item["content"][:200] + "...",
-                    "relevance": item.get("relevance", 0)
+                    "title": item.get("title", "Sem título"),
+                    "category": item.get("category", "Desconhecida"),
+                    "content_preview": ((item.get("content") or "")[:200] + ("..." if (item.get("content") or "") else "")),
+                    "relevance": (
+                        float(item.get("relevance", item.get("score", 0.0)) or 0.0)
+                        if not isinstance(item.get("relevance"), (dict, list)) else 0.0
+                    )
                 }
                 for item in relevant_context
             ],
             "confidence": 0.85,
             "timestamp": datetime.utcnow().isoformat(),
             "system_status": {
-                "openai_available": client is not None,
+                "openai_available": is_openai_available(),
                 "knowledge_base_size": len(relevant_context),
                 "search_type": search_type
             },
             "disclaimer": "Esta resposta é baseada em IA e tem caráter informativo. Para casos complexos, consulte um advogado especializado.",
             "debug_info": {
-                "openai_available": client is not None,
-                "active_model": active_model,
+                "openai_available": is_openai_available(),
+                "active_model": openai_manager.active_model,
                 "context_found": len(relevant_context),
-                "api_key_configured": openai_api_key is not None and openai_api_key != 'your_openai_api_key_here'
+                "api_key_configured": bool(openai_manager.api_key) and openai_manager.api_key != 'your_openai_api_key_here'
             },
             "params": {"top_k": top_k, "min_relevance": min_relevance}
         }
@@ -1073,7 +1089,6 @@ def search_legal():
 @app.route('/api/test-rag', methods=['POST'])
 def test_rag():
     """Test RAG system endpoint for admin dashboard"""
-    global client, active_model
     
     try:
         data = request.get_json()
@@ -1084,12 +1099,14 @@ def test_rag():
         
         start_time = time.time()
         
-        # Force OpenAI client initialization for this test
-        if not client and openai_api_key and openai_api_key.strip():
+        # Ensure OpenAI client is initialized for this test
+        if not is_openai_available():
             try:
-                client = OpenAI(api_key=openai_api_key.strip())
-                active_model = os.getenv('OPENAI_MODEL', 'gpt-5-nano')
-                logger.info("✅ OpenAI client force-initialized for RAG test")
+                success = initialize_openai_client()
+                if success:
+                    logger.info("✅ OpenAI client initialized for RAG test")
+                else:
+                    logger.warning("⚠️ OpenAI client still unavailable for RAG test")
             except Exception as e:
                 logger.error(f"❌ Failed to initialize OpenAI for RAG test: {e}")
         
@@ -1110,7 +1127,7 @@ def test_rag():
             "processing_time_ms": processing_time,
             "timestamp": datetime.utcnow().isoformat(),
             "system_status": {
-                "openai_available": client is not None,
+                "openai_available": is_openai_available(),
                 "knowledge_base_size": len(relevant_context)
             }
         })
@@ -1131,18 +1148,19 @@ def switch_model():
         
         # Reinitialize client
         success = initialize_openai_client()
+        current_model = openai_manager.active_model
         
         if success:
             return jsonify({
                 "success": True,
-                "message": f"Switched to model: {active_model}",
-                "active_model": active_model
+                "message": f"Switched to model: {current_model}",
+                "active_model": current_model
             })
         else:
             return jsonify({
                 "success": False,
                 "message": "Failed to initialize with new model",
-                "active_model": active_model
+                "active_model": current_model
             }), 500
             
     except Exception as e:
@@ -1156,10 +1174,10 @@ def switch_model():
 def debug_info():
     """Debug endpoint to check system status"""
     return jsonify({
-        "openai_client_available": client is not None,
-        "active_model": active_model,
-        "api_key_configured": openai_api_key is not None and openai_api_key != 'your_openai_api_key_here',
-        "api_key_length": len(openai_api_key) if openai_api_key else 0,
+        "openai_client_available": is_openai_available(),
+        "active_model": openai_manager.active_model,
+        "api_key_configured": bool(openai_manager.api_key) and openai_manager.api_key != 'your_openai_api_key_here',
+        "api_key_length": len(openai_manager.api_key) if openai_manager.api_key else 0,
         "model_configured": os.getenv('OPENAI_MODEL', 'Not set'),
         "cors_origins": allowed_origins,
         "knowledge_base_size": len(LEGAL_KNOWLEDGE),
