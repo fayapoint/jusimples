@@ -3,6 +3,7 @@
 ## RAG Pipeline Architecture
 
 ### Current Implementation Flow
+
 ```
 User Query → Query Processing → Embedding Generation → Vector Search → Context Filtering → AI Generation → Response
 ```
@@ -10,7 +11,9 @@ User Query → Query Processing → Embedding Generation → Vector Search → C
 ### Detailed Component Analysis
 
 #### 1. Query Processing (`/api/ask`)
+
 **Current State**: Basic text processing
+
 ```python
 # Location: backend/app.py:734
 - Input validation and sanitization
@@ -19,13 +22,16 @@ User Query → Query Processing → Embedding Generation → Vector Search → C
 ```
 
 **Optimization Opportunities**:
+
 - Query expansion using legal synonyms
 - Intent classification (question types)
 - Legal domain detection
 - Query complexity scoring
 
 #### 2. Embedding Generation
+
 **Current State**: OpenAI text-embedding-3-small
+
 ```python
 # Location: backend/retrieval.py
 - Model: text-embedding-3-small (1536 dimensions)
@@ -34,12 +40,15 @@ User Query → Query Processing → Embedding Generation → Vector Search → C
 ```
 
 **Performance Metrics**:
+
 - Embedding time: ~0.5-0.8 seconds per query
 - Cost: $0.00002 per 1K tokens
 - Accuracy: High semantic understanding
 
 #### 3. Vector Search
+
 **Current State**: Supabase pgvector with cosine similarity
+
 ```sql
 -- Current query structure
 SELECT *, (embedding <=> query_embedding) as distance
@@ -49,6 +58,7 @@ LIMIT top_k;
 ```
 
 **Critical Issue Identified**: Relevance threshold too strict
+
 ```python
 # Problem in app.py:796
 relevant_context = [it for it in relevant_context if it.get("relevance", 0.0) >= min_relevance]
@@ -56,12 +66,15 @@ relevant_context = [it for it in relevant_context if it.get("relevance", 0.0) >=
 ```
 
 #### 4. Context Filtering & Ranking
+
 **Current Issues**:
+
 - Static threshold causes context loss
 - No hybrid search (semantic + keyword)
 - Missing query-document relevance boosting
 
 **Solutions Implemented**:
+
 ```python
 # Dynamic threshold adjustment
 if len(relevant_context) == 0 and pre_filter_count > 0:
@@ -70,7 +83,9 @@ if len(relevant_context) == 0 and pre_filter_count > 0:
 ```
 
 #### 5. AI Generation
+
 **Current State**: OpenAI gpt-4o-mini with legal prompting
+
 ```python
 # Prompt structure in app.py:601
 system_message = "Você é um assistente jurídico especializado em direito brasileiro"
@@ -82,6 +97,7 @@ INSTRUÇÕES: [Detailed legal response guidelines]
 ```
 
 **Performance**: 
+
 - Response time: 1-2 seconds
 - Token usage: 200-600 tokens average
 - Cost: $0.00006-0.0002 per query
@@ -89,6 +105,7 @@ INSTRUÇÕES: [Detailed legal response guidelines]
 ## Optimization Strategies
 
 ### 1. Immediate Fixes (Priority 1)
+
 ```python
 # Fix relevance threshold issues
 - Implement dynamic thresholds
@@ -102,6 +119,7 @@ INSTRUÇÕES: [Detailed legal response guidelines]
 ```
 
 ### 2. Knowledge Base Expansion (Priority 1)
+
 ```python
 # Content strategy
 - Add 50+ legal documents immediately
@@ -110,6 +128,7 @@ INSTRUÇÕES: [Detailed legal response guidelines]
 ```
 
 ### 3. Query Processing Enhancement (Priority 2)
+
 ```python
 # Advanced query handling
 - Add legal term expansion
@@ -118,6 +137,7 @@ INSTRUÇÕES: [Detailed legal response guidelines]
 ```
 
 ### 4. Performance Optimization (Priority 3)
+
 ```python
 # Caching and speed improvements
 - Implement embedding caching
@@ -128,6 +148,7 @@ INSTRUÇÕES: [Detailed legal response guidelines]
 ## LexML API Integration Architecture
 
 ### Current LexML Implementation
+
 ```python
 # Location: backend/lexml_api.py
 - Basic document search functionality
@@ -138,6 +159,7 @@ INSTRUÇÕES: [Detailed legal response guidelines]
 ### Systematic Integration Strategy
 
 #### 1. Automated Content Ingestion
+
 ```python
 # Proposed implementation
 class LexMLContentManager:
@@ -146,7 +168,7 @@ class LexMLContentManager:
         - Process court decisions
         - Update existing documents
         - Validate content quality
-    
+
     def process_document(self, doc):
         - Extract legal text
         - Generate embeddings
@@ -155,6 +177,7 @@ class LexMLContentManager:
 ```
 
 #### 2. Content Quality Pipeline
+
 ```python
 # Quality assurance process
 def validate_legal_content(content):
@@ -165,6 +188,7 @@ def validate_legal_content(content):
 ```
 
 #### 3. Update Management
+
 ```python
 # Version control for legal content
 - Track legislative changes
@@ -176,6 +200,7 @@ def validate_legal_content(content):
 ## Database Schema Optimization
 
 ### Current Schema
+
 ```sql
 CREATE TABLE legal_chunks (
     id UUID PRIMARY KEY,
@@ -189,6 +214,7 @@ CREATE TABLE legal_chunks (
 ```
 
 ### Enhanced Schema
+
 ```sql
 CREATE TABLE legal_documents (
     id UUID PRIMARY KEY,
@@ -229,6 +255,7 @@ CREATE TABLE query_logs (
 ## Performance Monitoring
 
 ### Key Metrics to Track
+
 ```python
 # Query Performance
 - Average response time: <2 seconds target
@@ -250,15 +277,16 @@ CREATE TABLE query_logs (
 ```
 
 ### Monitoring Implementation
+
 ```python
 # Real-time monitoring
 class RAGMonitor:
     def log_query_performance(self, query, response_time, relevance_scores):
         # Track performance metrics
-        
+
     def analyze_content_gaps(self, failed_queries):
         # Identify missing knowledge areas
-        
+
     def optimize_relevance_thresholds(self, historical_data):
         # Dynamic threshold adjustment
 ```
@@ -266,24 +294,26 @@ class RAGMonitor:
 ## Deployment & Scaling Strategy
 
 ### Current Infrastructure
+
 - **Backend**: Railway deployment with health checks
 - **Database**: Supabase PostgreSQL with pgvector
 - **Frontend**: Netlify with React
 - **APIs**: OpenAI integration with robust error handling
 
 ### Scaling Recommendations
+
 ```python
 # Phase 1: Foundation (Current)
 - Fix RAG pipeline issues
 - Expand knowledge base to 50+ documents
 - Implement dynamic thresholds
 
-# Phase 2: Growth (Month 1)
+# Phase 2: Growth (Month 1 - 2)
 - Scale to 500+ documents
 - Implement caching systems
 - Add comprehensive monitoring
 
-# Phase 3: Enterprise (Month 2)
+# Phase 3: Enterprise (Month 3 - 4)
 - Multi-model AI support
 - Advanced query processing
 - Real-time LexML integration

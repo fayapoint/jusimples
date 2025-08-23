@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Scale, LogIn, UserPlus, Search, Sun, Moon, Monitor } from 'lucide-react';
+import { Scale, LogIn, UserPlus, Search, Sun, Moon, Monitor, Presentation } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 
@@ -45,6 +45,10 @@ export default function Header() {
               <Moon size={16} />
             </button>
           </div>
+          <Link className="btn btn-outline" to="/projeto">
+            <Presentation size={16} />
+            Projeto
+          </Link>
           <button
             className="btn btn-outline"
             onClick={() => window.dispatchEvent(new Event('open-command-palette'))}

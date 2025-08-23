@@ -21,6 +21,7 @@ import Consumidores from './pages/Consumidores';
 import Empresas from './pages/Empresas';
 import Advogados from './pages/Advogados';
 import Documentos from './pages/Documentos';
+import ProjectSalesEmbed from './pages/ProjectSalesEmbed';
 import { AuthProvider } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { BackgroundProvider } from './context/BackgroundContext';
@@ -131,6 +132,7 @@ function App() {
                     <Route path="/advogados" element={<Advogados />} />
                     <Route path="/documentos" element={<Documentos />} />
                     <Route path="/documentos/:id" element={<Documentos />} />
+                    <Route path="/projeto" element={<ProjectSalesEmbed />} />
                   </Routes>
                 </div>
                 <Footer />
